@@ -1302,19 +1302,41 @@ fetch('/diag/status').then(function(r) { return r.json(); }).then(function(d) {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: new URLSearchParams({ password: enteredPassword })
         })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (data.success) {
+        .then(function(r) { return r.json().then(function(data) { return { status: r.status, data: data }; }); })
+        .then(function(result) {
+            var data = result.data;
+            if (data && data.success) {
                 passwordVerified = true;
                 blockedButtonPressCount = 0;
                 updateLockUi(true);
                 if (rememberPin) storePin(enteredPassword);
-            } else {
-                passwordVerified = false;
-                updateLockUi(false);
-                clearStoredPin();
-                if (showErrorAlert) alert("Incorrect PIN. Please try again.");
+                return;
             }
+            passwordVerified = false;
+            updateLockUi(false);
+            clearStoredPin();
+            if (!showErrorAlert) return;
+            /* pin_not_configured: AuthMode is enabled but LCDPin is still 0.
+             * The PIN can only be set from the physical LCD menu, so guide
+             * the user there rather than the generic "Incorrect PIN". */
+            if (data && data.error === 'pin_not_configured') {
+                alert("No LCD PIN is configured on this device yet.\n\n" +
+                      "Auth Mode is enabled but the PIN is still 0 (unset). " +
+                      "Use the physical LCD menu on the charger to set a PIN, " +
+                      "then return to this page to log in.");
+                return;
+            }
+            if (result.status === 429 && data && data.rate_limited) {
+                var wait = data.retry_after || 30;
+                alert("Too many PIN attempts. Please wait " + wait + " seconds before trying again.");
+                return;
+            }
+            alert("Incorrect PIN. Please try again.");
+        })
+        .catch(function() {
+            passwordVerified = false;
+            updateLockUi(false);
+            if (showErrorAlert) alert("Could not reach the charger to verify the PIN.");
         });
     }
 

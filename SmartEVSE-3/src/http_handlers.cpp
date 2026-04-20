@@ -170,7 +170,7 @@ bool require_auth(struct mg_connection *c, struct mg_http_message *hm) {
     }
 
     http_auth_result_t r = http_auth_decide(
-            AuthMode, LCDPasswordOK, LCDPasswordOkSince,
+            AuthMode, LCDPin, LCDPasswordOK, LCDPasswordOkSince,
             (uint32_t)millis(),
             origin_buf[0] ? origin_buf : NULL,
             host_buf[0]   ? host_buf   : NULL);
@@ -1161,6 +1161,21 @@ bool handle_URI(struct mg_connection *c, struct mg_http_message *hm,  webServerR
         return true;
 
     } else if (mg_http_match_uri(hm, "/lcd-verify-password") && !memcmp("POST", hm->method.buf, hm->method.len)) {
+        /* Security guard — refuse before any state mutation or PIN compare
+         * when no PIN is provisioned. `LCDPin` defaults to 0 on a fresh install
+         * and `atoi("")` also returns 0, so without this guard an empty POST
+         * would mark the session authenticated. The debug unsigned-upload path
+         * and the Plan 16 AuthMode gate both read LCDPasswordOK, so refusing
+         * here closes the bypass at its single source. Do NOT count this
+         * against the rate limiter — it is a configuration error, not an
+         * attacker probe, and the legitimate operator should be told the
+         * reason without being cooled down. */
+        if (LCDPin == 0) {
+            mg_http_reply(c, 403, "Content-Type: application/json\r\n",
+                          "{\"success\":false,\"error\":\"pin_not_configured\"}\r\n");
+            return true;
+        }
+
         /* Plan 16 Phase 2 — brute-force limiter. Single global counter
          * (not per-IP) sized to the LAN trust model in the design doc.
          * On cooldown, return 429 Retry-After and do NOT attempt the PIN

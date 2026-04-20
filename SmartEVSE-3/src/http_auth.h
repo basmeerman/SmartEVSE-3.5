@@ -35,6 +35,10 @@ extern "C" {
  * gate. Pure — caller extracts the needed bits from Mongoose / millis() state.
  *
  *   auth_mode              — current AuthMode setting (AUTH_MODE_OFF / REQUIRED)
+ *   lcd_pin                — configured LCDPin value (0 means no PIN set, which
+ *                            makes auth unreachable: treated as DENY_UNAUTH
+ *                            whenever auth_mode != OFF so the default-zero PIN
+ *                            can never be mistaken for a valid credential)
  *   lcd_password_ok        — current LCDPasswordOK flag
  *   password_ok_ts_ms      — millis() at which LCDPasswordOK was set (0 if never)
  *   now_ms                 — current millis()
@@ -57,6 +61,7 @@ typedef enum {
 } http_auth_result_t;
 
 http_auth_result_t http_auth_decide(uint8_t        auth_mode,
+                                    uint16_t       lcd_pin,
                                     bool           lcd_password_ok,
                                     uint32_t       password_ok_ts_ms,
                                     uint32_t       now_ms,
