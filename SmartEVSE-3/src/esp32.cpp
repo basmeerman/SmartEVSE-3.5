@@ -591,24 +591,31 @@ void getButtonState() {
         ButtonState = ButtonStateOverride;
     else {
 #if SMARTEVSE_VERSION >=30 && SMARTEVSE_VERSION < 40
-        pinMatrixOutDetach(PIN_LCD_SDO_B3, false, false);       // disconnect MOSI pin
-        pinMode(PIN_LCD_SDO_B3, INPUT);
-        pinMode(PIN_LCD_A0_B2, INPUT);
+        if (EthPresent) {
+            // On EtherLCD boards the LCD/button pins are owned by the CH390D
+            // Ethernet SPI bus; buttons are read from the CH32V003 register.
+            ButtonState = etherlcd_read_buttons() & 0x07;
+        } else {
+            pinMatrixOutDetach(PIN_LCD_SDO_B3, false, false);       // disconnect MOSI pin
+            pinMode(PIN_LCD_SDO_B3, INPUT);
+            pinMode(PIN_LCD_A0_B2, INPUT);
 
-        // sample buttons                                                         < o >
-        ButtonState = (digitalRead(PIN_LCD_SDO_B3) ? 4 : 0) |  // > (right)
-                      (digitalRead(PIN_LCD_A0_B2)  ? 2 : 0) |  // o (middle)
-                      (digitalRead(PIN_IO0_B1)     ? 1 : 0);   // < (left)
+            // sample buttons                                                         < o >
+            ButtonState = (digitalRead(PIN_LCD_SDO_B3) ? 4 : 0) |  // > (right)
+                          (digitalRead(PIN_LCD_A0_B2)  ? 2 : 0) |  // o (middle)
+                          (digitalRead(PIN_IO0_B1)     ? 1 : 0);   // < (left)
 
-        pinMode(PIN_LCD_SDO_B3, OUTPUT);
-        pinMatrixOutAttach(PIN_LCD_SDO_B3, VSPID_IN_IDX, false, false); // re-attach MOSI pin
+            pinMode(PIN_LCD_SDO_B3, OUTPUT);
+            pinMatrixOutAttach(PIN_LCD_SDO_B3, VSPID_IN_IDX, false, false); // re-attach MOSI pin
+            pinMode(PIN_LCD_A0_B2, OUTPUT);                        // switch pin back to output
+        }
 #else
         pinMode(PIN_LCD_A0_B2, INPUT_PULLUP);                  // Switch the shared pin for the middle button to input
         ButtonState = (digitalRead(BUTTON3)        ? 4 : 0) |  // > (right)
                       (digitalRead(PIN_LCD_A0_B2)  ? 2 : 0) |  // o (middle)
                       (digitalRead(BUTTON1)        ? 1 : 0);   // < (left)
-#endif
         pinMode(PIN_LCD_A0_B2, OUTPUT);                        // switch pin back to output
+#endif
     }
     xSemaphoreGive(buttonMutex);
 }
@@ -2582,11 +2589,11 @@ void setup() {
     pinMode(PIN_SSR2, OUTPUT);              // SSR2 output
     pinMode(PIN_RCM_FAULT, INPUT_PULLUP);   
 
-    pinMode(PIN_LCD_LED, OUTPUT);           // LCD backlight
-    pinMode(PIN_LCD_RST, OUTPUT);           // LCD reset
+    // LCD pins (14, 25, 26, 33) are NOT configured yet — they are shared with
+    // the CH390D Ethernet add-on board. Probe for CH390D first (further down,
+    // after Serial is up), then set up the appropriate SPI device (Eth or LCD).
+    pinMode(PIN_LCD_RST, INPUT);            // LCD reset doubles as CH390D INT pin
     pinMode(PIN_IO0_B1, INPUT);             // < button
-    pinMode(PIN_LCD_A0_B2, OUTPUT);         // o Select button + A0 LCD
-    pinMode(PIN_LCD_SDO_B3, OUTPUT);        // > button + SDA/MOSI pin
 
     pinMode(PIN_LOCK_IN, INPUT);            // Locking Solenoid input
     pinMode(PIN_LEDR, OUTPUT);              // Red LED output
@@ -2606,7 +2613,6 @@ void setup() {
     digitalWrite(PIN_ACTB, LOW);        
     digitalWrite(PIN_SSR, LOW);             // SSR1 OFF
     digitalWrite(PIN_SSR2, LOW);            // SSR2 OFF
-    digitalWrite(PIN_LCD_LED, HIGH);        // LCD Backlight ON
     PILOT_DISCONNECTED;                     // CP signal OFF
 
  
@@ -2615,14 +2621,31 @@ void setup() {
     while (!Serial);
     _LOG_A("SmartEVSE v3 powerup\n");
 
-    // configure SPI connection to LCD
-    // only the SPI_SCK and SPI_MOSI pins are used
-    SPI.begin(SPI_SCK, SPI_MISO, SPI_MOSI, SPI_SS);
-    // the ST7567's max SPI Clock frequency is 20Mhz at 3.3V/25C
-    // We choose 10Mhz here, to reserve some room for error.
-    // SPI mode is MODE3 (Idle = HIGH, clock in on rising edge)
-    SPI.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE3));
-    
+    // Probe for the CH390D Ethernet add-on board (EtherLCD).
+    // Must run before any LCD pin setup — the shared SPI pins (14, 25, 26, 33)
+    // must be free for the IDF SPI driver to claim via the GPIO matrix.
+    if (ch390_detect()) {
+        _LOG_A("CH390D Ethernet detected\n");
+        ch390_eth_init();
+        // The EtherLCD board has a CH32V003 that controls A0/RST/backlight/buttons
+        etherlcd_init();
+    } else {
+        // No Ethernet add-on — configure the shared pins for LCD use.
+        pinMode(PIN_LCD_RST, OUTPUT);           // LCD reset (GPIO 5)
+        pinMode(PIN_LCD_LED, OUTPUT);           // LCD backlight (GPIO 14)
+        digitalWrite(PIN_LCD_LED, HIGH);        // LCD Backlight ON
+        pinMode(PIN_LCD_A0_B2, OUTPUT);         // o Select button + A0 LCD (GPIO 25)
+        pinMode(PIN_LCD_SDO_B3, OUTPUT);        // > button + SDA/MOSI pin (GPIO 33)
+
+        // configure SPI connection to LCD
+        // only the SPI_SCK and SPI_MOSI pins are used
+        SPI.begin(SPI_SCK, SPI_MISO, SPI_MOSI, SPI_SS);
+        // the ST7567's max SPI Clock frequency is 20Mhz at 3.3V/25C
+        // We choose 10Mhz here, to reserve some room for error.
+        // SPI mode is MODE3 (Idle = HIGH, clock in on rising edge)
+        SPI.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE3));
+    }
+
 
     // The CP (control pilot) output is a fixed 1khz square-wave (+6..9v / -12v).
     // It's pulse width varies between 10% and 96% indicating 6A-80A charging current.
@@ -2662,7 +2685,9 @@ void setup() {
     ledcSetup(RED_CHANNEL, 5000, 8);            // R channel 2, 5kHz, 8 bit
     ledcSetup(GREEN_CHANNEL, 5000, 8);          // G channel 3, 5kHz, 8 bit
     ledcSetup(BLUE_CHANNEL, 5000, 8);           // B channel 4, 5kHz, 8 bit
-    ledcSetup(LCD_CHANNEL, 5000, 8);            // LCD channel 5, 5kHz, 8 bit
+    if (!EthPresent) {
+        ledcSetup(LCD_CHANNEL, 5000, 8);        // LCD channel 5, 5kHz, 8 bit
+    }  // When EthPresent, backlight PWM is handled by the CH32V003
 
     // attach the channels to the GPIO to be controlled
     ledcAttachPin(PIN_CP_OUT, CP_CHANNEL);      
@@ -2672,13 +2697,15 @@ void setup() {
     ledcAttachPin(PIN_LEDR, RED_CHANNEL);
     ledcAttachPin(PIN_LEDG, GREEN_CHANNEL);
     ledcAttachPin(PIN_LEDB, BLUE_CHANNEL);
-    ledcAttachPin(PIN_LCD_LED, LCD_CHANNEL);
+    if (!EthPresent) {
+        ledcAttachPin(PIN_LCD_LED, LCD_CHANNEL);
+    }  // When EthPresent, PIN_LCD_LED is used as ETH_CS
 
     SetCPDuty(1024);                            // channel 0, duty cycle 100%
     ledcWrite(RED_CHANNEL, 255);
     ledcWrite(GREEN_CHANNEL, 0);
     ledcWrite(BLUE_CHANNEL, 255);
-    ledcWrite(LCD_CHANNEL, 0);
+    setLCDbacklight(0);
 
     // Setup PIN interrupt on rising edge
     // the timer interrupt will be reset in the ISR.
@@ -3104,7 +3131,7 @@ void loop() {
 
     //OCPP lifecycle management
 #if ENABLE_OCPP && defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
-    if (OcppMode && !getOcppContext() && WiFi.isConnected()) {
+    if (OcppMode && !getOcppContext() && NetworkConnected()) {                  // EtherLCD (#168): bring OCPP up over WiFi OR Ethernet
         ocppInit();
     } else if (!OcppMode && getOcppContext()) {
         ocppDeinit();

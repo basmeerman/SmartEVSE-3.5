@@ -67,6 +67,7 @@
 #define SPI_SCK 26
 #define SPI_SS -1
 
+#include "ch390.h"                                                              // CH390D Ethernet driver + EthPresent/EthConnected/EthHasIP
 #include "etherlcd.h"                                                           // CH32V003 Ethernet+LCD board interface
 
 #define CP_CHANNEL 0

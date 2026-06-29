@@ -1,6 +1,30 @@
 # Analysis: Upstream Commit 543af26 — EtherLCD Support
 
-## Status: Long-lived test branch
+## UPDATE (2026-06, branch `fix/issue-168-etherlcd`, fork issue #168)
+
+The "Pre-merge work needed" items below are now **implemented**. The runtime
+wiring that the original test branch deliberately left out has been completed:
+
+- `esp32.cpp::setup()` — CH390D probe (`ch390_detect()` → `ch390_eth_init()` +
+  `etherlcd_init()`), with LCD pin/SPI/`ledc` setup moved into the no-Ethernet
+  branch and gated on `!EthPresent`.
+- `esp32.cpp::getButtonState()` — reads the CH32V003 (`etherlcd_read_buttons()`)
+  when `EthPresent`.
+- `esp32.cpp::loop()` — OCPP lifecycle now uses `NetworkConnected()`.
+- `network_common.cpp` — `NetworkConnected()`, shared `onGotIP()` +
+  `startNetworkServices()`, Ethernet-priority `handleWIFImode()`, deferred
+  `WIFImodeChanged` handling in `network_loop()`, MQTT connect over
+  `NetworkConnected()`, and the `7353d50` DNS-panic fix in `WiFiSetup()`.
+- `http_handlers.cpp` — `eth.present/connected/has_ip/ip/mac` added to
+  `/settings` (the fork's location for `handle_URI`).
+- Pure-C `net_iface.c`/`.h` holds the interface-selection decisions, covered by
+  `test/native/tests/test_net_iface.c` (9 tests).
+
+Verified: ESP32 release (Flash 88.9%, RAM 24.1%) + CH32 build, 55 native suites,
+ASan/UBSan, cppcheck. **Still gated on the on-device bring-up checklist below**
+before any merge to `master`.
+
+## Status: Long-lived test branch (original notes, superseded by the UPDATE above)
 
 This commit is being held on a **separate long-lived branch**
 (`upstream/543af26-etherlcd-test`) per user direction:

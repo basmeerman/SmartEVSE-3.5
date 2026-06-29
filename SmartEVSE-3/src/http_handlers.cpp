@@ -267,6 +267,24 @@ bool handle_URI(struct mg_connection *c, struct mg_http_message *hm,  webServerR
             doc["wifi"]["bssid"] = WiFi.BSSIDstr();
         }
 
+#if SMARTEVSE_VERSION >= 30 && SMARTEVSE_VERSION < 40
+        // EtherLCD (#168): expose CH390D Ethernet status to the web UI / EVCC
+        doc["eth"]["present"] = EthPresent;
+        doc["eth"]["connected"] = EthConnected;
+        doc["eth"]["has_ip"] = EthHasIP;
+        if (EthHasIP) {
+            doc["eth"]["ip"] = ch390_get_ip();
+        }
+        if (EthPresent) {
+            uint8_t eth_mac[6];
+            esp_read_mac(eth_mac, ESP_MAC_ETH);
+            char mac_str[18];
+            snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X",
+                     eth_mac[0], eth_mac[1], eth_mac[2], eth_mac[3], eth_mac[4], eth_mac[5]);
+            doc["eth"]["mac"] = mac_str;
+        }
+#endif
+
         doc["evse"]["temp"] = TempEVSE;
         doc["evse"]["temp_max"] = maxTemp;
         doc["evse"]["connected"] = evConnected;

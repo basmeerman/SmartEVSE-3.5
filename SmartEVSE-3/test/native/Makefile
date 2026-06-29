@@ -24,6 +24,7 @@ MQTT_PUBLISH_SRC   := $(SRC_DIR)/mqtt_publish.c
 HTTP_API_SRC       := $(SRC_DIR)/http_api.c
 SERIAL_PARSER_SRC  := $(SRC_DIR)/serial_parser.c
 LED_COLOR_SRC      := $(SRC_DIR)/led_color.c
+NET_IFACE_SRC      := $(SRC_DIR)/net_iface.c
 METER_TELEMETRY_SRC := $(SRC_DIR)/meter_telemetry.c
 MODBUS_DECODE_SRC   := $(SRC_DIR)/modbus_decode.c
 METER_DECODE_SRC    := $(SRC_DIR)/meter_decode.c
@@ -64,6 +65,9 @@ $(BUILD)/test_serial_parser: $(TEST_DIR)/test_serial_parser.c $(SERIAL_PARSER_SR
 
 $(BUILD)/test_led_color: $(TEST_DIR)/test_led_color.c $(LED_COLOR_SRC) $(SRC_DIR)/led_color.h include/*.h | $(BUILD)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(TEST_DIR)/test_led_color.c $(LED_COLOR_SRC)
+
+$(BUILD)/test_net_iface: $(TEST_DIR)/test_net_iface.c $(NET_IFACE_SRC) $(SRC_DIR)/net_iface.h include/*.h | $(BUILD)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(TEST_DIR)/test_net_iface.c $(NET_IFACE_SRC)
 
 $(BUILD)/test_meter_telemetry: $(TEST_DIR)/test_meter_telemetry.c $(METER_TELEMETRY_SRC) $(SRC_DIR)/meter_telemetry.h include/*.h | $(BUILD)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(TEST_DIR)/test_meter_telemetry.c $(METER_TELEMETRY_SRC)
