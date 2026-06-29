@@ -566,6 +566,21 @@ const char * getErrorNameWeb(uint8_t ErrorCode) {
 }
 
 
+// LCD backlight wrapper — routes to either the standard LCD PWM channel
+// or the CH32V003 controlling backlight on EtherLCD boards (upstream 543af26).
+void setLCDbacklight(uint8_t pwm) {
+#if SMARTEVSE_VERSION >=30 && SMARTEVSE_VERSION < 40
+    if (EthPresent) {
+        etherlcd_set_backlight(pwm);
+    } else {
+        ledcWrite(LCD_CHANNEL, pwm);
+    }
+#else
+    (void)pwm;
+#endif
+}
+
+
 void getButtonState() {
     // Sample the three < o > buttons.
     // As the buttons are shared with the SPI lines going to the LCD,

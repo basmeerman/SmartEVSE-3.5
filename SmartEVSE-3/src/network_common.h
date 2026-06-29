@@ -27,6 +27,7 @@
 
 #include "main.h" //so SENSORBOX_VERSION is read in Sensorbox
 #include "mongoose.h"
+#include "ch390.h"
 #include <ArduinoJson.h>
 
 #ifndef MQTT
@@ -59,6 +60,7 @@ extern uint8_t lastMqttUpdate;
 extern bool MQTTtls;
 extern bool MQTTSmartServer;
 extern bool MQTTSmartServerChanged;        // Flag to trigger reconnect from network_loop()
+extern bool WIFImodeChanged;               // Flag to trigger handleWIFImode() from network_loop()
 extern String MQTTprivatePassword;   
 
 class MQTTclient_t {
@@ -160,6 +162,9 @@ extern bool getLatestVersion(String owner_repo, String asset_name, char *version
 struct mg_connection;
 struct mg_http_message;
 extern bool require_auth(struct mg_connection *c, struct mg_http_message *hm);
+/* EtherLCD (#168): true if WiFi OR Ethernet (CH390D) currently has an IP. */
+extern bool NetworkConnected(void);
+extern void onGotIP(const char *dns_ip);                                        // shared IP-acquired handler
 #ifndef SENSORBOX_VERSION
 // Result struct for HomeWizard P1 meter readings
 struct HomeWizardP1Result {

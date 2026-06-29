@@ -2417,18 +2417,18 @@ static void timer10ms_backlight(void) {
     if (BacklightTimer > 1 && BacklightSet != 1) {                      // Enable LCD backlight at max brightness
                                                                         // start only when fully off(0) or when we are dimming the backlight(2)
         LcdPwm = LCD_BRIGHTNESS;
-        ledcWrite(LCD_CHANNEL, LcdPwm);
+        setLCDbacklight(LcdPwm);
         BacklightSet = 1;                                               // 1: we have set the backlight to max brightness
     }
 
     if (BacklightTimer == 1 && LcdPwm >= 3) {                           // Last second of Backlight
         LcdPwm -= 3;
-        ledcWrite(LCD_CHANNEL, ease8InOutQuad(LcdPwm));                 // fade out
+        setLCDbacklight(ease8InOutQuad(LcdPwm));                        // fade out
         BacklightSet = 2;                                               // 2: we are dimming the backlight
     }
                                                                         // Note: could be simplified by removing following code if LCD_BRIGHTNESS is multiple of 3
     if (BacklightTimer == 0 && BacklightSet) {                          // End of LCD backlight
-        ledcWrite(LCD_CHANNEL, 0);                                      // switch off LED PWM
+        setLCDbacklight(0);                                             // switch off LED PWM
         BacklightSet = 0;                                               // 0: backlight fully off
     }
 }
