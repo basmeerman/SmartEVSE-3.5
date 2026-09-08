@@ -1,5 +1,7 @@
-SmartEVSE v3
+SmartEVSE v3 (Public case study for agentic engineering)
 =========
+
+*Please note: This repo is sparsely maintained. The upstream repo @ https://github.com/dingo35/SmartEVSE-3.5 is better suited to seek active support. Dingo35 and others are doing a great job in maintaining and supporting the community of SmartEVSE users.*
 
 Smart Electric Vehicle Charge Controller — open-source firmware for a
 DIN-rail AC charger.
