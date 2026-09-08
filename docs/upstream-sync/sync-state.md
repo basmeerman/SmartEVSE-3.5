@@ -23,9 +23,10 @@ as absent from the fork. The remaining 99 are triaged below, grouped by theme.
 Two structural facts dominate this window and should be settled before any bulk merge:
 
 1. **Upstream deleted the v4 / CH32 target and the `ENABLE_OCPP` build switch.** The fork
-   builds and budgets both (`pio run -e ch32`, CI enforces the CH32 flash/RAM budget).
-   Every future upstream file touching `main.cpp`, `esp32.cpp`, `glcd.cpp` or `main.h`
-   now carries that deletion in its context.
+   built and budgeted both (`pio run -e ch32`, CI enforced the CH32 flash/RAM budget).
+   **Decision 1 (2026-09-08): the fork follows upstream and drops them**, so this stops
+   being a divergence and becomes a scheduled removal — see group A and the decisions
+   section at the end.
 2. **Upstream and the fork implemented capacity-tariff peak tracking and CircuitMeter
    independently.** The fork shipped them as Plan 13 / Plan 14 (`capacity_peak.c`,
    pure-C, tested); upstream shipped `CapacityMode` + `interval.html` + `capacity.html`
@@ -34,16 +35,20 @@ Two structural facts dominate this window and should be settled before any bulk 
    JSON keys) are worth aligning.
 
 The practical consequence: **cherry-pick-and-adapt remains the only viable strategy;
-a merge of `origin/master` is off the table for this window.**
+a merge of `origin/master` is off the table for this window.** Decisions 1 and 2 narrow the
+gap deliberately — dropping v4/CH32 and adopting `shadowPrefs` both move the fork's
+`esp32.cpp`, `main.cpp` and `glcd.cpp` closer to upstream's shape, which is what makes
+later picks cheaper. Plans 01-16 keep the fork diverged by design; that part is not
+changing.
 
-### A. Structural divergence — rejected by fork policy
+### A. Structural divergence — resolved: fork follows upstream (decision 1)
 
 | Hash | Date | Title | Classification | Priority | Notes |
 |------|------|-------|----------------|----------|-------|
-| `df910fb` | 2026-06-27 | remove all v4 / CH32 stuff | **Rejected** | — | 18,073 deletions across 33 files, including `wchisp.cpp`. Fork supports CH32 (dedicated `pio -e ch32` build, CI budget gate). Permanent divergence. |
-| `f72ade5` | 2026-06-27 | remove ENABLE_OCPP ifdefs | **Rejected** | — | Fork keeps OCPP behind a build switch so the non-OCPP image stays inside the flash budget. |
-| `9510b30` | 2026-06-29 | main.cpp: remove unused v4 Read functions | **Rejected** | — | Same reason as `df910fb`; those functions are live on the fork's v4 path. |
-| `9651e62` | 2026-06-08 | fix v4 bug | **Already fixed** | — | Fixes an upstream `SMARTCircuitSE_VERSION` typo introduced by upstream's own CircuitMeter commit. The fork's CircuitMeter (Plan 14) never had it — `grep SMARTCircuitSE` returns nothing. |
+| `df910fb` | 2026-06-27 | remove all v4 / CH32 stuff | **Adopt (adapt)** | P2 | Fork drops the v4 / CH32 target to match upstream. Our removal is larger than upstream's diff: `ch32.cpp/h`, `wchisp.cpp/h`, the `v4` and `ch32` PlatformIO envs (`platformio.ini:80`, `:95`), ~254 `SMARTEVSE_VERSION` guards across `src/`, the CH32 flash/RAM budget gate in CI, plus the CLAUDE.md budget table and pre-push verification step 5. Do it as its own PR, before the `esp32.cpp`-heavy work in group E. |
+| `f72ade5` | 2026-06-27 | remove ENABLE_OCPP ifdefs | **Adopt (adapt)** | P2 | OCPP becomes unconditional. Verify the release image still fits the ESP32 flash budget without the non-OCPP configuration as an escape hatch — that budget headroom was the original reason for the switch. |
+| `9510b30` | 2026-06-29 | main.cpp: remove unused v4 Read functions | **Adopt** | P2 | Falls out of `df910fb`; take it in the same PR. |
+| `9651e62` | 2026-06-08 | fix v4 bug | **Skip** | — | Fixes an upstream `SMARTCircuitSE_VERSION` typo in code the fork never had (`grep SMARTCircuitSE` returns nothing), on a target the fork is now removing. |
 
 ### B. Correctness bugs that also exist in the fork — P1
 
@@ -96,10 +101,16 @@ Specific findings:
   shared meter timeout and would hit the same false-timeout behaviour.
 - **`beaabb3` (MaxSumMains NVS storage bug)** — one-line; verify whether the fork's
   `PREFS_PUT_*_IF_CHANGED` path has the same defect.
-- MQTT/NVS naming should be diffed field by field: upstream `MaxSumMains` /
-  `MaxSumMainsTime` / `CapacityMode` vs the fork's `CapacityLimit` /
-  `CapacityWindowAvg` / `CapacityMonthlyPeak` / `CapacityHeadroom`. Divergent topic names
-  mean a Home Assistant config written for one firmware breaks on the other.
+- **Decision 3 (2026-09-08): keep the fork's names, document the difference.** No
+  aliases and no renames. The two models are not the same feature — upstream's
+  `CapacityMode` is interval-table driven (`interval.html`, `capacity.html`, `/powerday`),
+  the fork's Plan 13 is 15-min rolling peak tracking with automatic `IsetBalanced`
+  clamping — so a shared vocabulary would misrepresent both. Record in
+  `upstream-differences.md`: fork publishes `/CurrentMaxSumMains`, `/CapacityLimit`,
+  `/CapacityWindowAvg`, `/CapacityMonthlyPeak`, `/CapacityHeadroom` and has no
+  `MaxSumMainsTime` topic, where upstream publishes `/MaxSumMains` and `/MaxSumMainsTime`.
+  A Home Assistant config written for one firmware does not carry over to the other. This
+  closes items `4198813` and `b2e8ad4` as **Rejected** rather than *Evaluate*.
 
 ### E. NVS rework — architectural collision
 
@@ -112,13 +123,19 @@ Specific findings:
 | `459e182` | 2026-06-17 | reduce OCPP MaxCurrent overhead | **Adopt** | P3 | One-line, independent of the rework. |
 | `e72abb6` | 2026-06-17 | fix RequiredEVCCID | **Adopt** | **P2** | 3 lines. `RequiredEVCCID` is the buffer behind security finding H-5; re-verify the fork's NUL-termination still holds after any change here. |
 
-The fork deliberately uses `request_write_settings()` + `PREFS_PUT_*_IF_CHANGED` against
-`settingsCache` (see the NVS write-pattern note in project memory); upstream has now
-deleted both. Adopting `shadowPrefs` is a self-contained refactor with a real benefit
-(atomic per-key saves, less flash wear) but it is a **prerequisite for cleanly taking any
-later upstream `esp32.cpp` change**, since every one of them now sits on top of it.
-Recommend deciding this explicitly rather than drifting. Note that `b97d97c` (group H)
-already depends on `shadowPrefs.loop(true)`.
+**Decision 2 (2026-09-08): adopt `shadowPrefs`.** The fork used
+`request_write_settings()` + `PREFS_PUT_*_IF_CHANGED` against `settingsCache`
+(74 references in `esp32.cpp`, 23 `request_write_settings()` call sites); upstream deleted
+both. The rework buys atomic per-key saves and less flash wear, and it is a prerequisite
+for cleanly taking any later upstream `esp32.cpp` change — every one of them now sits on
+top of it, `b97d97c` (group H) included. Classification for the whole series therefore
+moves from *Evaluate (blocked)* to **Adopt (adapt)**, scheduled after the P1 bug bundle
+and after the group A removal (which shrinks `esp32.cpp` first).
+
+Risk to manage: the NVS layer holds every user setting and the native harness cannot reach
+Arduino `Preferences`, so nothing here is covered by `make test`. The port needs on-device
+verification — settings survive reboot, LCD menu exit writes immediately, and no key is
+lost when several are changed inside the 60s window.
 
 ### F. Networked meters / HomeWizard
 
@@ -138,9 +155,16 @@ for `EM_ORNO3P` / `EM_ORNO1P`, with `EM_CUSTOM` at 19 (`meter.h:47-52`). Meter t
 persisted NVS value and is exposed over MQTT and `/settings`, so the two firmwares now
 disagree about what "17" means. Consequences to record: a fork user's Orno configuration
 would silently become a Chint configuration if they ever flash upstream, and vice versa.
-The fork should add Chint DDSU666 at a fresh slot (20) rather than adopting upstream's
-numbering, add the register profile to the Plan 12 Modbus compatibility suite, and this
-divergence must be documented in `upstream-differences.md`.
+**Decision 4 (2026-09-08): add Chint DDSU666 at fork slot 20, keep Orno at 17/18.**
+Adopting upstream's numbering would silently convert every existing fork user's Orno
+setting into a Chint one — wrong register map, wrong readings — so the fork renumbers
+nothing. Mechanically this is cheap: the LCD range is derived from the table size
+(`esp32.h:179`, `EMConfigSize / sizeof(EMConfig[0]) - 1`) and nothing treats `EM_CUSTOM`
+as the last entry; only direct `EMConfig[EM_CUSTOM]` lookups exist. Work item: add
+`EM_CHINT_1P` at 20 with the DDSU666 register profile, add the profile to the Plan 12
+Modbus compatibility suite, and document in `upstream-differences.md` that fork 17/18 are
+Orno 3P/1P while upstream 17 is Chint 1P — cross-flashing between the two rewrites the
+meter type.
 
 ### G. MQTT / integration surface
 
@@ -148,8 +172,8 @@ divergence must be documented in `upstream-differences.md`.
 |------|------|-------|----------------|----------|-------|
 | `2ae8b2e` | 2026-04-28 | Add MQTT `StateID` topic for interfacing with evcc.io (#357) | **Adopt (adapt)** | **P2** | The fork publishes `/State` (`getStateNameWeb`) but has **no `StateID` topic** (`grep StateID` returns nothing). This is the topic evcc reads. The fork's Plan 04 EVCC work went through the HTTP API and IEC 61851 mapping instead, so this is a genuine gap for MQTT-only evcc users. Adopt the topic name verbatim — interop names must match upstream. |
 | `1ea2301` | 2026-05-05 | Update esp32.cpp (#375) | **Adopt (adapt)** | P2 | The Home Assistant discovery `announce()` for `StateID` that `2ae8b2e` forgot. Take both together, and register it through the fork's change-only publish slot mechanism (Plan 08) rather than an unconditional publish. |
-| `4198813` | 2026-04-15 | Add MaxSumMains and MaxSumMainsTime to MQTT (#355) | **Evaluate** | P3 | Name-compat item for group D. |
-| `b2e8ad4` | 2026-04-15 | Update MQTT announcement for MaxSumMainsTime to minute | **Evaluate** | P3 | Unit correction on the above. |
+| `4198813` | 2026-04-15 | Add MaxSumMains and MaxSumMainsTime to MQTT (#355) | **Rejected** | — | Per decision 3: the fork keeps `/CurrentMaxSumMains` and does not adopt upstream's topic names. |
+| `b2e8ad4` | 2026-04-15 | Update MQTT announcement for MaxSumMainsTime to minute | **Rejected** | — | Unit correction on a topic the fork does not publish. |
 | `7823707` | 2026-08-27 | Add MQTT announcements for circuit energy metrics (#400) | **Already fixed (verify names)** | P3 | The fork already publishes `/CircuitImportEnergy` and `/CircuitExportEnergy` with HA announcements (`esp32.cpp:1097-1098`, `:1325-1327`) from Plan 14. Diff the topic strings against upstream's and record any mismatch. |
 
 ### H. Web UI and LCD
@@ -228,18 +252,35 @@ second half (`shadowPrefs.loop(true)`) depends on group E and does not apply yet
 8. **Contract-compatibility review (analysis doc, no code):** group D naming — MQTT
    topics, NVS keys and `/settings` fields for capacity tariff and CircuitMeter.
 
-### Open questions for the maintainer
+### Decisions (2026-09-08)
 
-1. **CH32 / v4:** confirm the fork keeps them. If yes, record `df910fb` / `f72ade5` /
-   `9510b30` as permanent divergence in `upstream-differences.md` and accept that
-   `main.cpp` and `esp32.cpp` picks will need manual adaptation indefinitely.
-2. **`shadowPrefs`:** adopt the upstream NVS rework, or freeze the fork on
-   `settingsCache` + `request_write_settings`?
-3. **Capacity tariff naming:** align the fork's MQTT/NVS names with upstream's
-   `CapacityMode` / `MaxSumMains` vocabulary for HA-config portability, or keep the
-   fork's more descriptive names and document the difference?
-4. **Meter type IDs:** confirm slot 20 for Chint DDSU666 rather than adopting upstream's
-   slot 17, which would break existing fork users' Orno configurations.
+All four questions raised by this triage were answered by the maintainer on 2026-09-08.
+
+| # | Question | Decision | Consequence |
+|---|----------|----------|-------------|
+| 1 | v4 / CH32 target | **Drop it, follow upstream** | Own PR: delete `ch32.cpp/h`, `wchisp.cpp/h`, the `v4` and `ch32` envs, ~254 `SMARTEVSE_VERSION` guards, the CH32 CI budget gate, the CLAUDE.md budget row and pre-push verification step 5. `f72ade5` (drop `ENABLE_OCPP`) rides along, subject to the ESP32 flash budget still holding with OCPP always compiled in. |
+| 2 | Upstream `shadowPrefs` NVS rework | **Adopt** | Port `bd2475a` → `7e194ee` adapted, after the P1 bundle and after the group A removal. Needs on-device verification; the native harness cannot reach Arduino `Preferences`. Supersedes the fork's `settingsCache` / `request_write_settings` pattern and the project-memory note describing it. |
+| 3 | Capacity tariff naming | **Keep fork names, document the difference** | No aliases, no renames. `4198813` and `b2e8ad4` become *Rejected*. `upstream-differences.md` records the topic-name divergence and that HA configs are not portable between the two firmwares. |
+| 4 | Meter type IDs / Chint DDSU666 | **Add at slot 20, keep Orno at 17/18** | New `EM_CHINT_1P` = 20 with the DDSU666 register profile, a Plan 12 compatibility profile, and an `upstream-differences.md` entry for the 17/18 vs upstream-17 collision. |
+
+Decisions 1 and 2 are deliberate convergence: both shrink and reshape `esp32.cpp`,
+`main.cpp` and `glcd.cpp` toward upstream, which lowers the cost of every later pick.
+Decisions 3 and 4 are deliberate divergence, both to protect existing fork users'
+configurations. Ordering matters — group A removal first, then `shadowPrefs`, because the
+removal deletes a large amount of the `esp32.cpp` that the NVS port would otherwise have
+to be adapted around.
+
+### Execution order after these decisions
+
+1. P1 correctness bundle — `36621b6`, `1c80751`, `b97d97c` (the `clearErrorFlags(0xFF)`
+   half only, until `shadowPrefs` lands).
+2. P1 security — `e36a3cb` portal-mode URI restriction via the Plan 16 auth gate.
+3. Group A removal — drop v4 / CH32 and the `ENABLE_OCPP` switch (decision 1).
+4. Group E — `shadowPrefs` NVS rework (decision 2), plus `e72abb6` and `459e182`.
+5. Interop — `2ae8b2e` + `1ea2301` MQTT `StateID` through the Plan 08 change-only slots.
+6. Meters — Chint DDSU666 at slot 20 (decision 4) + Plan 12 profile.
+7. EtherLCD branch top-up — `c725bb2`, `9e1faa9`, `5d1e849`, still gated on hardware.
+8. Analysis-only — network meters (group F) and the remaining group D evaluation items.
 
 ---
 
