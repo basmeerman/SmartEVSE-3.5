@@ -56,8 +56,6 @@ need to deviate from, why, and what safeguards you will put in place.
 # ESP32 v3
 pio run -e release -d SmartEVSE-3/
 
-# CH32
-pio run -e ch32 -d SmartEVSE-3/
 ```
 
 ### Running Tests
@@ -380,7 +378,7 @@ When working with a single AI agent, it must self-enforce the Quality Guardian
 checklist before marking work complete:
 
 1. All tests pass (`make clean test`)
-2. Firmware compiles (`pio run -e release`, `pio run -e ch32`)
+2. Firmware compiles (`pio run -e release`)
 3. New tests have SbE annotations with valid requirement IDs
 4. No coding standard violations in changed files
 5. Test specification regenerated if tests were added

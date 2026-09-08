@@ -23,13 +23,11 @@
 #include <LittleFS.h>
 
 //OCPP includes
-#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
 #include <MicroOcpp.h>
 #include <MicroOcppMongooseClient.h>
 #include <MicroOcpp/Core/Configuration.h>
 #include "ocpp_logic.h"
 #include "ocpp_telemetry.h"
-#endif //SMARTEVSE_VERSION
 
 // Externs for globals not exposed via headers
 extern unsigned char RFID[8];
@@ -92,11 +90,9 @@ extern bool MQTTChangeOnly;
 extern uint16_t MQTTHeartbeat;
 #endif
 
-#if defined(SMARTEVSE_VERSION)
 extern MicroOcpp::MOcppMongooseClient *OcppWsClient;
 extern float OcppCurrentLimit;
 extern ocpp_telemetry_t OcppTelemetry;
-#endif
 
 //make mongoose 7.14 compatible with 7.13
 #define mg_http_match_uri(X,Y) mg_match(X->uri, mg_str(Y), NULL)
@@ -343,22 +339,6 @@ bool handle_URI(struct mg_connection *c, struct mg_http_message *hm,  webServerR
             }
             // END PLAN-07
         }
-#if MODEM
-            doc["settings"]["required_evccid"] = RequiredEVCCID;
-#if SMARTEVSE_VERSION < 40
-            doc["settings"]["modem"] = "Experiment";
-#else
-            doc["settings"]["modem"] = "QCA7000";
-#endif
-            doc["ev_state"]["initial_soc"] = InitialSoC;
-            doc["ev_state"]["remaining_soc"] = RemainingSoC;
-            doc["ev_state"]["full_soc"] = FullSoC;
-            doc["ev_state"]["energy_capacity"] = EnergyCapacity > 0 ? EnergyCapacity : -1; // Wh
-            doc["ev_state"]["energy_request"] = EnergyRequest > 0 ? EnergyRequest : -1; // Wh
-            doc["ev_state"]["computed_soc"] = ComputedSoC;
-            doc["ev_state"]["evccid"] = EVCCID;
-            doc["ev_state"]["time_until_full"] = TimeUntilFull;
-#endif
 
 #if MQTT
         doc["mqtt"]["host"] = MQTTHost;
@@ -377,7 +357,6 @@ bool handle_URI(struct mg_connection *c, struct mg_http_message *hm,  webServerR
         doc["mqtt"]["heartbeat"] = MQTTHeartbeat;
 #endif
 
-#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
         doc["ocpp"]["mode"] = OcppMode ? "Enabled" : "Disabled";
         doc["ocpp"]["backend_url"] = OcppWsClient ? OcppWsClient->getBackendUrl() : "";
         doc["ocpp"]["cb_id"] = OcppWsClient ? OcppWsClient->getChargeBoxId() : "";
@@ -413,7 +392,6 @@ bool handle_URI(struct mg_connection *c, struct mg_http_message *hm,  webServerR
         doc["ocpp"]["smart_charging_active"] = (!LoadBl && OcppCurrentLimit >= 0.0f);
         doc["ocpp"]["current_limit_a"] = OcppCurrentLimit >= 0.0f ? OcppCurrentLimit : -1;
         doc["ocpp"]["lb_conflict"] = OcppTelemetry.lb_conflict;
-#endif //SMARTEVSE_VERSION
 
         doc["home_battery"]["current"] = homeBatteryCurrent;
         doc["home_battery"]["last_update"] = homeBatteryLastUpdate;
@@ -635,9 +613,6 @@ bool handle_URI(struct mg_connection *c, struct mg_http_message *hm,  webServerR
 
             switch(mode.toInt()) {
                 case 0: // OFF
-#if SMARTEVSE_VERSION >=40 //v4
-                    Serial1.printf("@ResetModemTimers\n");
-#endif
                     setAccess(OFF);
                     break;
                 case 1:
@@ -749,20 +724,6 @@ bool handle_URI(struct mg_connection *c, struct mg_http_message *hm,  webServerR
             SetCPDuty(pwm);
             doc["override_pwm"] = pwm;
         }
-#if MODEM
-        //allow basic plug 'n charge based on evccid
-        //if required_evccid is set to a value, SmartEVSE will only allow charging requests from said EVCCID
-        if(request->hasParam("required_evccid")) {
-            if (request->getParam("required_evccid")->value().length() <= 32) {
-                strncpy(RequiredEVCCID, request->getParam("required_evccid")->value().c_str(), sizeof(RequiredEVCCID) - 1);
-                RequiredEVCCID[sizeof(RequiredEVCCID) - 1] = '\0';
-                doc["required_evccid"] = RequiredEVCCID;
-                Serial1.printf("@RequiredEVCCID:%s\n", RequiredEVCCID);
-            } else {
-                doc["required_evccid"] = "EVCCID too long (max 32 char)";
-            }
-        }
-#endif
         if(request->hasParam("prio_strategy")) {
             int val = request->getParam("prio_strategy")->value().toInt();
             const char *err = http_api_validate_prio_strategy(val, LoadBl);
@@ -812,7 +773,6 @@ bool handle_URI(struct mg_connection *c, struct mg_http_message *hm,  webServerR
             }
         }
 
-#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
         if(request->hasParam("ocpp_update")) {
             if (request->getParam("ocpp_update")->value().toInt() == 1) {
 
@@ -896,7 +856,6 @@ bool handle_URI(struct mg_connection *c, struct mg_http_message *hm,  webServerR
                 MicroOcpp::configuration_save();
             }
         }
-#endif //SMARTEVSE_VERSION
 
         String json;
         serializeJson(doc, json);
@@ -1000,16 +959,12 @@ bool handle_URI(struct mg_connection *c, struct mg_http_message *hm,  webServerR
         if(MainsMeter.Type == EM_API) {
             if(request->hasParam("L1") && request->hasParam("L2") && request->hasParam("L3")) {
                 if (LoadBl < 2) {
-#if SMARTEVSE_VERSION < 40 //v3
                     MainsMeter.Irms[0] = request->getParam("L1")->value().toInt();
                     MainsMeter.Irms[1] = request->getParam("L2")->value().toInt();
                     MainsMeter.Irms[2] = request->getParam("L3")->value().toInt();
 
                     CalcIsum();
                     MainsMeter.setTimeout(COMM_TIMEOUT);
-#else  //v4
-                    Serial1.printf("@Irms:%03u,%d,%d,%d\n", MainsMeter.Address, (int16_t) request->getParam("L1")->value().toInt(), (int16_t) request->getParam("L2")->value().toInt(), (int16_t) request->getParam("L3")->value().toInt()); //Irms:011,312,123,124 means: the meter on address 11(dec) has Irms[0] 312 dA, Irms[1] of 123 dA, Irms[2] of 124 dA
-#endif
                     for (int x = 0; x < 3; x++) {
                         doc["original"]["L" + x] = IrmsOriginal[x];
                         doc["L" + x] = MainsMeter.Irms[x];
@@ -1025,15 +980,11 @@ bool handle_URI(struct mg_connection *c, struct mg_http_message *hm,  webServerR
         if(CircuitMeter.Type == EM_API) {
             if(request->hasParam("circuit_L1") && request->hasParam("circuit_L2") && request->hasParam("circuit_L3")) {
                 if (LoadBl < 2) {
-#if SMARTEVSE_VERSION < 40 //v3
                     CircuitMeter.Irms[0] = request->getParam("circuit_L1")->value().toInt();
                     CircuitMeter.Irms[1] = request->getParam("circuit_L2")->value().toInt();
                     CircuitMeter.Irms[2] = request->getParam("circuit_L3")->value().toInt();
                     CircuitMeter.CalcImeasured();
                     CircuitMeter.setTimeout(COMM_TIMEOUT);
-#else //v4
-                    Serial1.printf("@Irms:%03u,%d,%d,%d\n", CircuitMeter.Address, (int16_t) request->getParam("circuit_L1")->value().toInt(), (int16_t) request->getParam("circuit_L2")->value().toInt(), (int16_t) request->getParam("circuit_L3")->value().toInt());
-#endif
                     for (int x = 0; x < 3; x++)
                         doc["circuit"]["L" + x] = CircuitMeter.Irms[x];
                     doc["circuit"]["TOTAL"] = CircuitMeter.Irms[0] + CircuitMeter.Irms[1] + CircuitMeter.Irms[2];
@@ -1053,15 +1004,11 @@ bool handle_URI(struct mg_connection *c, struct mg_http_message *hm,  webServerR
 
         if(EVMeter.Type == EM_API) {
             if(request->hasParam("L1") && request->hasParam("L2") && request->hasParam("L3")) {
-#if SMARTEVSE_VERSION < 40 //v3
                 EVMeter.Irms[0] = request->getParam("L1")->value().toInt();
                 EVMeter.Irms[1] = request->getParam("L2")->value().toInt();
                 EVMeter.Irms[2] = request->getParam("L3")->value().toInt();
                 EVMeter.CalcImeasured();
                 EVMeter.Timeout = COMM_EVTIMEOUT;
-#else //v4
-                Serial1.printf("@Irms:%03u,%d,%d,%d\n", EVMeter.Address, (int16_t) request->getParam("L1")->value().toInt(), (int16_t) request->getParam("L2")->value().toInt(), (int16_t) request->getParam("L3")->value().toInt()); //Irms:011,312,123,124 means: the meter on address 11(dec) has Irms[0] 312 dA, Irms[1] of 123 dA, Irms[2] of 124 dA
-#endif
                 for (int x = 0; x < 3; x++)
                     doc["ev_meter"]["currents"]["L" + x] = EVMeter.Irms[x];
                 doc["ev_meter"]["currents"]["TOTAL"] = EVMeter.Irms[0] + EVMeter.Irms[1] + EVMeter.Irms[2];
@@ -1071,11 +1018,7 @@ bool handle_URI(struct mg_connection *c, struct mg_http_message *hm,  webServerR
 
                 EVMeter.Import_active_energy = request->getParam("import_active_energy")->value().toInt();
                 EVMeter.Export_active_energy = request->getParam("export_active_energy")->value().toInt();
-#if SMARTEVSE_VERSION < 40 //v3
                 EVMeter.PowerMeasured = request->getParam("import_active_power")->value().toInt();
-#else //v4
-                Serial1.printf("@PowerMeasured:%03u,%d\n", EVMeter.Address, (int16_t) request->getParam("import_active_power")->value().toInt());
-#endif
                 EVMeter.UpdateEnergies(); //we dont send the energies to CH32 because they are not used there
                 doc["ev_meter"]["import_active_power"] = EVMeter.PowerMeasured;
                 doc["ev_meter"]["import_active_energy"] = EVMeter.Import_active_energy;
@@ -1302,65 +1245,6 @@ bool handle_URI(struct mg_connection *c, struct mg_http_message *hm,  webServerR
         mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s\r\n", json.c_str());
         return true;
 
-#if MODEM && SMARTEVSE_VERSION < 40
-    } else if (mg_http_match_uri(hm, "/ev_state") && !memcmp("POST", hm->method.buf, hm->method.len)) {
-        if (!require_auth(c, hm)) return true;  // Plan 16 — auth gate
-        DynamicJsonDocument doc(200);
-
-        //State of charge posting
-        int current_soc = request->getParam("current_soc")->value().toInt();
-        int full_soc = request->getParam("full_soc")->value().toInt();
-
-        // Energy requested by car
-        int energy_request = request->getParam("energy_request")->value().toInt();
-
-        // Total energy capacity of car's battery
-        int energy_capacity = request->getParam("energy_capacity")->value().toInt();
-
-        // Update EVCCID of car
-        if (request->hasParam("evccid")) {
-            if (request->getParam("evccid")->value().length() <= 32) {
-                strncpy(EVCCID, request->getParam("evccid")->value().c_str(), sizeof(EVCCID) - 1);
-                EVCCID[sizeof(EVCCID) - 1] = '\0';
-                doc["evccid"] = EVCCID;
-            }
-        }
-
-        if (full_soc >= FullSoC) // Only update if we received it, since sometimes it's there, sometimes it's not
-            FullSoC = full_soc;
-
-        if (energy_capacity >= EnergyCapacity) // Only update if we received it, since sometimes it's there, sometimes it's not
-            EnergyCapacity = energy_capacity;
-
-        if (energy_request >= EnergyRequest) // Only update if we received it, since sometimes it's there, sometimes it's not
-            EnergyRequest = energy_request;
-
-        if (current_soc >= 0 && current_soc <= 100) {
-            // We set the InitialSoC for our own calculations
-            InitialSoC = current_soc;
-
-            // We also set the ComputedSoC to allow for app integrations
-            ComputedSoC = current_soc;
-
-            // Skip waiting, charge since we have what we've got
-            if (State == STATE_MODEM_REQUEST || State == STATE_MODEM_WAIT || State == STATE_MODEM_DONE){
-                _LOG_A("Received SoC via REST. Shortcut to State Modem Done\n");
-                setState(STATE_MODEM_DONE); // Go to State B, which means in this case setting PWM
-            }
-        }
-
-        RecomputeSoC();
-
-        doc["current_soc"] = current_soc;
-        doc["full_soc"] = full_soc;
-        doc["energy_capacity"] = energy_capacity;
-        doc["energy_request"] = energy_request;
-
-        String json;
-        serializeJson(doc, json);
-        mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s\r\n", json.c_str());    // Yes. Respond JSON
-        return true;
-#endif
     } else if (mg_http_match_uri(hm, "/session/last") && !memcmp("GET", hm->method.buf, hm->method.len)) {
         const session_record_t *last = session_get_last();
         if (!last) {
@@ -1375,19 +1259,6 @@ bool handle_URI(struct mg_connection *c, struct mg_http_message *hm,  webServerR
         }
         return true;
 
-#if MODEM && SMARTEVSE_VERSION >= 40
-    } else if (mg_http_match_uri(hm, "/ev_state") && !memcmp("GET", hm->method.buf, hm->method.len)) {
-        //this can be activated by: curl -X GET "http://smartevse-xxxx.lan/ev_state?update_ev_state=1" -d ''
-        uint8_t GetState = 0;
-        if(request->hasParam("update_ev_state")) {
-            GetState = strtol(request->getParam("update_ev_state")->value().c_str(),NULL,0);
-            if (GetState)
-                setState(STATE_MODEM_REQUEST);
-        }
-        _LOG_A("DEBUG: GetState=%u.\n", GetState);
-        mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s\r\n", ""); //json request needs json response
-        return true;
-#endif
 
 #if FAKE_RFID
     //this can be activated by: http://smartevse-xxx.lan/debug?showrfid=1
@@ -1409,15 +1280,12 @@ bool handle_URI(struct mg_connection *c, struct mg_http_message *hm,  webServerR
         if (!require_auth(c, hm)) return true;  // Plan 16 — auth gate
         if(request->hasParam("current_max")) {
             MaxCurrent = strtol(request->getParam("current_max")->value().c_str(),NULL,0);
-            SEND_TO_CH32(MaxCurrent)
         }
         if(request->hasParam("current_main")) {
             MaxMains = strtol(request->getParam("current_main")->value().c_str(),NULL,0);
-            SEND_TO_CH32(MaxMains)
         }
         if(request->hasParam("current_max_circuit")) {
             MaxCircuit = strtol(request->getParam("current_max_circuit")->value().c_str(),NULL,0);
-            SEND_TO_CH32(MaxCircuit)
         }
         if(request->hasParam("mainsmeter")) {
             MainsMeter.Type = strtol(request->getParam("mainsmeter")->value().c_str(),NULL,0);
@@ -1429,16 +1297,12 @@ bool handle_URI(struct mg_connection *c, struct mg_http_message *hm,  webServerR
         }
         if(request->hasParam("config")) {
             Config = strtol(request->getParam("config")->value().c_str(),NULL,0);
-            SEND_TO_CH32(Config)
             setState(STATE_A);                                                  // so the new value will actually be read
         }
         if(request->hasParam("loadbl")) {
             int LBL = strtol(request->getParam("loadbl")->value().c_str(),NULL,0);
-#if SMARTEVSE_VERSION >=30 && SMARTEVSE_VERSION < 40
             ConfigureModbusMode(LBL);
-#endif
             LoadBl = LBL;
-            SEND_TO_CH32(LoadBl)
         }
         mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s\r\n", ""); //json request needs json response
         return true;

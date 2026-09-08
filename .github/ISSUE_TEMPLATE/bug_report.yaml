@@ -8,7 +8,6 @@ body:
       label: Hardware Version
       options:
         - SmartEVSE v3
-        - SmartEVSE v4
     validations:
       required: true
 

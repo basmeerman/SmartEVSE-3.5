@@ -21,7 +21,7 @@ explicit written approval from the project maintainer. Never silently deviate.
 ## Project Context
 
 SmartEVSE is safety-critical embedded firmware for an EV charging controller running
-on ESP32 and CH32 microcontrollers. Incorrect code can damage vehicles, trip breakers,
+on the ESP32 of SmartEVSE v3. Incorrect code can damage vehicles, trip breakers,
 or cause electrical hazards. Treat every change as if it controls a contactor
 switching 32A at 400V — because it does.
 
@@ -110,7 +110,6 @@ Check `SmartEVSE-3/test/native/test-specification.md` for existing IDs.
 ### Memory Awareness
 
 - ESP32: 1,640KB flash (95% budget), 288KB RAM (90% budget)
-- CH32: 61KB flash (95% budget), 18KB RAM (90% budget)
 - New static buffers must be justified. Prefer stack allocation for temporary buffers.
 - Test code compiles only in the native test harness, never in firmware builds.
 - Arduino `String` is acceptable in non-safety glue code (MQTT publish, JSON).
@@ -157,7 +156,6 @@ cd SmartEVSE-3/test/native && make clean test
 
 # Build firmware
 pio run -e release -d SmartEVSE-3/
-pio run -e ch32 -d SmartEVSE-3/
 
 # Regenerate test spec
 cd SmartEVSE-3/test/native && python3 scripts/extract_traceability.py \

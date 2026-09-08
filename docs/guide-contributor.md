@@ -33,7 +33,7 @@ SmartEVSE-3/
     Makefile                 # Builds each suite independently
 
   data/                      # Web UI source (app.js, index.html, ...)
-  platformio.ini             # ESP32 / CH32 build environments
+  platformio.ini             # ESP32 build environments
 
 docs/                         # Reference + guides (you are here)
 ```
@@ -58,9 +58,10 @@ docs/                         # Reference + guides (you are here)
    access `evse_ctx_t` fields from outside the bridge without explicit
    synchronisation.
 
-5. **Platform guards only in glue.** `#ifdef SMARTEVSE_VERSION` (30 for
-   v3, 40 for v4 ESP32-S3) belongs in the bridge and glue layers, never
-   in the state machine or parser modules.
+5. **Platform-specific code only in glue.** The tree targets SmartEVSE v3
+   (ESP32) only, so there are no version guards to add — hardware access
+   belongs in the bridge and glue layers, never in the state machine or
+   parser modules.
 
 Full writeup: [quality.md](quality.md).
 
@@ -149,8 +150,6 @@ Must be clean.
 ```bash
 pio run -e release -d SmartEVSE-3/      # ESP32 v3
 pio run -e debug   -d SmartEVSE-3/      # ESP32 v3 debug
-pio run -e v4      -d SmartEVSE-3/      # ESP32-S3 v4
-pio run -e ch32    -d SmartEVSE-3/      # CH32 co-processor
 ```
 
 All environments must build. Type errors, missing symbols, Arduino API
@@ -234,9 +233,7 @@ open PRs. The agent workflow is additive, not mandatory.
 
 | Target | Flash budget | RAM budget | Current |
 |---|---|---|---|
-| ESP32 v3 | 95% (1,680 KB) | 90% (288 KB) | ~86% / ~24% |
-| ESP32 v4 (S3) | 95% | 90% | ~84% |
-| CH32 | 95% (62 KB) | 90% (18 KB) | ~59% / ~19% |
+| ESP32 v3 | 95% (1,680 KB) | 90% (288 KB) | ~87% / ~24% |
 
 Before merging, verify your PR doesn't push past the budget. The
 release build log prints flash and RAM usage at the end. CI enforces.

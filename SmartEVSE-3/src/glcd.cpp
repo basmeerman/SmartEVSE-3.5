@@ -21,7 +21,6 @@
 ; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 ; THE SOFTWARE.
  */
-#ifdef SMARTEVSE_VERSION //ESP32
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,9 +34,7 @@
 #include "font.cpp"
 #include "font2.cpp"
 
-#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
 #include <MicroOcpp.h>
-#endif
 
 const unsigned char LCD_Flow [] = {
 0x00, 0x00, 0x98, 0xCC, 0x66, 0x22, 0x22, 0x22, 0xF2, 0xAA, 0x26, 0x2A, 0xF2, 0x22, 0x22, 0x22,
@@ -94,7 +91,6 @@ unsigned char activeRow;
 extern Switch_Phase_t Switching_Phases_C2;
 extern uint8_t RCMTestCounter;
 
-#if SMARTEVSE_VERSION >=30 && SMARTEVSE_VERSION < 40
 
 void st7565_command(unsigned char data) {
     _A0_0;
@@ -105,22 +101,6 @@ void st7565_data(unsigned char data) {
     _A0_1;
     SPI.transfer(data);
 }
-#else //SMARTEVSE_VERSION
-
-void st7565_command(unsigned char data) {
-    _A0_0;
-    digitalWrite(LCD_CS, LOW);
-    LCD_SPI2.transfer(data);
-    digitalWrite(LCD_CS, HIGH);
-}
-
-void st7565_data(unsigned char data) {
-    _A0_1;
-    digitalWrite(LCD_CS, LOW);
-    LCD_SPI2.transfer(data);
-    digitalWrite(LCD_CS, HIGH);
-}
-#endif //SMARTEVSE_VERSION
 
 void goto_row(unsigned char y) {
     unsigned char pattern;
@@ -580,21 +560,6 @@ void GLCD(void) {
                 GLCD_print_buf2(6, (const char *) "RESET");
             }
             return;
-#if SMARTEVSE_VERSION >= 40
-        } else if (!(ErrorFlags & RCM_TRIPPED) && (ErrorFlags & RCM_TEST) && !RCMTestCounter) {    // Residual Current Sensor test failed
-            if (!LCDToggle) {
-                GLCD_print_buf2(0, (const char *) "RESIDUAL");
-                GLCD_print_buf2(2, (const char *) "SENSOR");
-                GLCD_print_buf2(4, (const char *) "TEST");
-                GLCD_print_buf2(6, (const char *) "FAILED");
-            } else {
-                GLCD_print_buf2(0, (const char *) "REBOOT");
-                GLCD_print_buf2(2, (const char *) "TO");
-                GLCD_print_buf2(4, (const char *) "RESET");
-                GLCD_print_buf2(6, (const char *) "");
-            }
-            return;
-#endif
         } else if (ErrorFlags & Test_IO) {                                      // Only used when testing the module
             GLCD_print_buf2(2, (const char *) "IO Test");
             snprintf(Str, sizeof(Str), "FAILED! %u", TestState);
@@ -621,7 +586,6 @@ void GLCD(void) {
         glcd_clrln(6, 0x10);                                                    // horizontal line
         glcd_clrln(7, 0x00);
 
-#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
         if (OcppMode &&                                          // OCPP enabled
                 (getItemValue(MENU_RFIDREADER) == 6 || getItemValue(MENU_RFIDREADER) == 0) && // RFID in OCPP mode or disabled
                 ocppHasTxNotification()) {                                      // There is an OCPP event to display
@@ -666,24 +630,9 @@ void GLCD(void) {
                     break;
             }
         } else
-#endif //SMARTEVSE_VERSION
         if (ErrorFlags & LESS_6A && AccessStatus == ON) {
             GLCD_print_buf2(2, (const char *) "WAITING");
             GLCD_print_buf2(4, (const char *) "FOR POWER");
-#if MODEM
-        } else if (State == STATE_MODEM_REQUEST || State == STATE_MODEM_WAIT || State == STATE_MODEM_DONE) {                                          // Modem states
-
-            BacklightTimer = BACKLIGHT;
-
-            GLCD_print_buf2(2, (const char *) "MODEM");
-            GLCD_print_buf2(4, (const char *) "COMM");
-        } else if (State == STATE_MODEM_DENIED) {                               // Modem denied state
-
-            BacklightTimer = BACKLIGHT;
-
-            GLCD_print_buf2(2, (const char *) "MODEM");
-            GLCD_print_buf2(4, (const char *) "DENIED");
-#endif
         } else if (State == STATE_C) {                                          // STATE C
             
             BacklightTimer = BACKLIGHT;
@@ -705,7 +654,6 @@ void GLCD(void) {
             } else if (AccessStatus == PAUSE) {
                 GLCD_print_buf2(2, (const char *) "PAUSE");
             } else {
-#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
                 if (OcppMode &&                                  // OCPP enabled
                         (getItemValue(MENU_RFIDREADER) == 6 || getItemValue(MENU_RFIDREADER) == 0)) { // RFID in OCPP mode or disabled
                     switch (getChargePointStatus()) {
@@ -754,7 +702,6 @@ void GLCD(void) {
                             break;
                     }
                 } else
-#endif //SMARTEVSE_VERSION
                 if (getItemValue(MENU_RFIDREADER)) {
                     if (RFIDstatus == 7) {
                         GLCD_print_buf2(2, (const char *) "INVALID");
@@ -912,10 +859,6 @@ void GLCD(void) {
                 }
             }
 
-#if MODEM
-        } else if (State == STATE_MODEM_REQUEST || State == STATE_MODEM_WAIT || State == STATE_MODEM_DONE) {                                          // Modem states
-            GLCD_print_buf2(5, (const char *) "MODEM");
-#endif
         } else if (AccessStatus == PAUSE) {
                     GLCD_print_buf2(5, "PAUSE");
         } else if (State != STATE_C) {
@@ -1501,9 +1444,7 @@ void GLCDMenu(uint8_t Buttons) {
 
 
 void GLCD_init(void) {
-#if SMARTEVSE_VERSION >=30 && SMARTEVSE_VERSION < 40
     delay(200);                                                                 // transients on the line could have garbled the LCD, wait 200ms then re-init.
-#endif
     _A0_0;                                                                      // A0=0
     _RSTB_0;                                                                    // Reset GLCD module
     delayMicroseconds(4);
@@ -1532,14 +1473,6 @@ void GLCD_init(void) {
     goto_col(0x00);                                                             // (4) Set column addr LSB
  
     st7565_command(0xAF);                                                       // (1) ON command
-#if SMARTEVSE_VERSION >= 40
-    glcd_clrln(0, 0x00);
-    glcd_clrln(1, 0x04);                                                // horizontal line
-    GLCD_print_buf2(2, (const char *) "SmartEVSE 4");
-    GLCD_print_buf2(4, (const char *) "Prototype 1");
-    glcd_clrln(6, 0x10);                                                // horizontal line
-    glcd_clrln(7, 0x00);
-#endif
 }
 
 /**
@@ -1652,4 +1585,3 @@ std::vector<uint8_t> createImageFromGLCDBuffer() {
     return imageData;
 }
 
-#endif

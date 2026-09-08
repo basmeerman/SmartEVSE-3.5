@@ -27,9 +27,7 @@
 #include "firmware_manager.h"
 #include "meter.h"
 
-#if SMARTEVSE_VERSION >=30
 #include "OneWire.h"
-#endif
 
 #ifndef DEBUG_DISABLED
 RemoteDebug Debug;
@@ -1333,11 +1331,7 @@ R"EOF(
 // (port 80/443), outbound clients (MQTT, OCPP WS, DNS/SNTP), and connections
 // already marked for close are intentionally excluded from the count.
 // v4 (ESP32-S3, PSRAM) has headroom for more concurrent sessions.
-#if SMARTEVSE_VERSION >= 40
-#define MAX_HTTP_CONNECTIONS 12
-#else
 #define MAX_HTTP_CONNECTIONS 8
-#endif
 
 // Count active accepted server-side connections. Listeners and outbound
 // client connections share struct mg_connection with accepted ones in
@@ -1761,7 +1755,6 @@ static void fn_http_server(struct mg_connection *c, int ev, void *ev_data) {
                         FREE(signature);
                     }
                 } else //end of firmware.signed.bin
-#if SMARTEVSE_VERSION >=30
                 if (!memcmp(file,"rfid.txt", sizeof("rfid.txt"))) {
                     if (offset != 0) {
                         mg_http_reply(c, 400, "", "rfid.txt too big, only 100 rfid's allowed!");
@@ -1810,23 +1803,16 @@ static void fn_http_server(struct mg_connection *c, int ev, void *ev_data) {
                     }
                 } else //end of rfid.txt
                     mg_http_reply(c, 400, "", "only allowed to flash firmware.bin, firmware.debug.bin, firmware.signed.bin, firmware.debug.signed.bin or rfid.txt");
-#else
-                    mg_http_reply(c, 400, "", "only allowed to flash firmware.bin, firmware.debug.bin, firmware.signed.bin, firmware.debug.signed.bin");
-#endif
                 mg_http_reply(c, 200, "", "%ld", res);
             }
         } else if (mg_http_match_uri(hm, "/reboot")) {
             if (!require_auth(c, hm)) return;  // Plan 16 — auth gate
             shouldReboot = true;
-#ifndef SMARTEVSE_VERSION //sensorbox
-            mg_http_reply(c, 200, "", "Rebooting after 5s...");
-#else
             if (State == STATE_C) {
                 mg_http_reply(c, 202, "", "Reboot scheduled: Device will reboot 5 seconds after the EV stops charging...");
             } else {
                 mg_http_reply(c, 200, "", "Device will reboot in 5 seconds...");
             }
-#endif
         } else if (mg_http_match_uri(hm, "/settings") && !memcmp("POST", hm->method.buf, hm->method.len)) {
             if (!require_auth(c, hm)) return;  // Plan 16 — auth gate
             DynamicJsonDocument doc(64);
@@ -1946,7 +1932,7 @@ void timeSyncCallback(struct timeval *tv)
     // which is a blocking TCP send. This deadlocks because lwIP is waiting for this callback
     // to return while the TCP send needs lwIP to process packets.
     _LOG_A("Synced clock to NTP server!");
-#if MQTT && MQTT_ESP && SMARTEVSE_VERSION 
+#if MQTT && MQTT_ESP
     // Start SmartEVSE MQTT connection after time is synced (TLS requires correct time for certificate validation)
     // Only connect on first sync - subsequent syncs should not restart the MQTT connection!
     if (!LocalTimeSet) {
@@ -2010,10 +1996,8 @@ void onWifiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
 #else
             if (MQTTHost != "" && MQTTclient.client)
                 esp_mqtt_client_start(MQTTclient.client);
-#ifdef SMARTEVSE_VERSION                
             if (MQTTSmartServer && MQTTclientSmartEVSE.client)
                 esp_mqtt_client_start(MQTTclientSmartEVSE.client);
-#endif
 #endif
 #endif //MQTT
             mg_log_set(MG_LL_NONE);
@@ -2257,7 +2241,7 @@ void WiFiSetup(void) {
 void network_loop() {
     static unsigned long lastCheck_net = 0;
 
-#if MQTT && MQTT_ESP && SMARTEVSE_VERSION
+#if MQTT && MQTT_ESP
     // Handle SmartEVSE MQTT server setting change (set by LCD menu)
     // This runs in main loop context where MQTT operations are safe
     if (MQTTSmartServerChanged) {
