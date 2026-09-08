@@ -40,6 +40,36 @@ python packfs.py
 this should generate a fresh src/packed_fs.c file.
 
 
+# Version numbering
+
+This firmware uses a fork-branded CalVer scheme:
+
+```
+bm-YYYY.MM.N        e.g. bm-2026.09.1
+ |    |    |  |
+ |    |    |  +-- sequence within the month, from 1
+ |    |    +----- month, zero-padded
+ |    +---------- year
+ +--------------- distribution prefix
+```
+
+It is deliberately **not** comparable with the reference codebase's `vX.Y.Z`.
+The two projects diverged long ago and are aligned functionally rather than
+commit-by-commit, so a shared or comparable number would imply a lineage that
+does not exist — and, before this scheme, made it impossible to tell from a
+version string alone which repository built a given device.
+
+Two consequences worth knowing:
+
+- The running distribution is reported as `distribution` in the `GET /settings`
+  response and on the MQTT `/Distribution` topic, alongside `version`.
+- The automatic updater only ever installs releases of the same distribution.
+  See [AUTOUPDAT](configuration.md#autoupdat).
+
+Releases are published as GitHub release assets on this repository; there is no
+S3 mirror. Git tags match the version string exactly (`bm-2026.09.1`), which CI
+enforces on every tagged build.
+
 # Flashing the firmware
 1. Almost always, even when your webserver seems not to be working, the http://ipaddress/update link will be working;
    this is the simplest way to flash your firmware; with the "Choose file" option you can flash any firmware[.debug].bin you downloaded or built.

@@ -173,6 +173,9 @@ extern String homeWizardHost;
 extern String homeWizardManualIP;
 #endif
 
+// S3 bucket belonging to the factory/community distributions. Only the
+// factory and community rows on the update page download from it; this
+// distribution publishes to its own GitHub releases and never writes here.
 #define FW_DOWNLOAD_PATH "http://smartevse-3.s3.eu-west-2.amazonaws.com"
 
 #define OWNER_FACT "SmartEVSE"
@@ -182,5 +185,10 @@ extern String homeWizardManualIP;
 #define OWNER_BASM "basmeerman"
 #define REPO_BASM "SmartEVSE-3.5"
 #define GH_RELEASE_URL "https://github.com"
+
+// This build's own distribution, used by the automatic updater. Releases are
+// GitHub release assets on this repository — there is no S3 mirror.
+#define OWN_DISTRIBUTION_REPO  OWNER_BASM "/" REPO_BASM
+#define OWN_FIRMWARE_ASSET     "firmware.signed.bin"
 
 #endif

@@ -100,6 +100,15 @@ Background — community reports:
 | Per-phase power/energy via MQTT | No per-phase visibility | [Features: MQTT & HA](features.md#mqtt--home-assistant) |
 | Metering diagnostic counters | No insight into meter communication health | [Features: MQTT & HA](features.md#mqtt--home-assistant) |
 
+### Versioning & Updates
+
+| Improvement | Why | Details |
+|-------------|-----|---------|
+| Fork-branded CalVer (`bm-YYYY.MM.N`) | Both projects previously published `vX.Y.Z` releases, so a version string alone could not tell a user or a maintainer which repository built a device — a recurring source of confusion in support threads. The two codebases are aligned functionally, not commit-by-commit, so a comparable number would imply a lineage that does not exist. | [Building & flashing](building_flashing.md#version-numbering) |
+| `distribution` identity field | `GET /settings` and MQTT `/Distribution` report which build is running, next to the version | [MQTT reference](mqtt-home-assistant.md#full-mqtt-topic-reference) |
+| Automatic updates stay within one distribution | The updater accepts an update only when both the running and candidate versions parse as this scheme, so it can never silently move a device to another distribution's firmware. Cross-distribution flashing remains available manually from the update page. | `fw_version.c`, 13 tests |
+| Releases via GitHub assets only | This repository has no S3 credentials and never writes to the reference codebase's bucket; the release workflow's dormant S3 upload was removed | `.github/workflows/pio-release.yaml` |
+
 ### Metering & Modbus
 
 | Improvement | Why | Details |

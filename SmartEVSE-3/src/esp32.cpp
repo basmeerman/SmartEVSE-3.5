@@ -44,6 +44,7 @@
 #include "mqtt_publish.h"
 #include "http_api.h"
 #include "capacity_peak.h"
+#include "fw_version.h"
 
 //OCPP includes
 #include <MicroOcpp.h>
@@ -917,6 +918,7 @@ void SetupMQTTClient() {
     MQTTclient.announce("Access", "sensor", optional_payload);
     MQTTclient.announce("State", "sensor", optional_payload);
     MQTTclient.announce("StateID", "sensor", optional_payload);     // raw state letter/name, read by evcc.io
+    MQTTclient.announce("Distribution", "sensor", optional_payload);  // which firmware distribution this device runs
     MQTTclient.announce("RFID", "sensor", optional_payload);
     MQTTclient.announce("RFIDLastRead", "sensor", optional_payload);
     MQTTclient.announce("NrOfPhases", "sensor", optional_payload);
@@ -1203,6 +1205,7 @@ void mqttPublishData() {
          * cleanup that wipes any legacy retained PIN once on first publish. */
         mqtt_pub_str(MQTT_SLOT_PAIRING_PIN, "/PairingPin", PairingPin.c_str(), false, now_s);
         mqtt_pub_str(MQTT_SLOT_FIRMWARE_VERSION, "/FirmwareVersion", VERSION, true, now_s);
+        mqtt_pub_str(MQTT_SLOT_DISTRIBUTION, "/Distribution", FW_DISTRIBUTION, true, now_s);
         mqtt_pub_int(MQTT_SLOT_SOLAR_STOP_TIMER, "/SolarStopTimer", SolarStopTimer, false, now_s);
         mqtt_pub_int(MQTT_SLOT_CURRENT_MAX_SUM_MAINS, "/CurrentMaxSumMains", MaxSumMains, true, now_s);
         if (LoadBl == 1) {
@@ -2441,34 +2444,19 @@ void setup() {
 }
 
 
-// returns true if current and latest version can be detected correctly and if the latest version is newer then current
-// this means that ANY home compiled version, which has version format "11:20:03@Jun 17 2024", will NEVER be automatically updated!!
-// same goes for current version with an -RC extension: this will NEVER be automatically updated!
-// same goes for latest version with an -RC extension: this will NEVER be automatically updated! This situation should never occur since
-// we only update from the "stable" repo !!
+// Decides whether the automatic updater should install `version` over the
+// running VERSION. The comparison itself lives in pure C fw_version.c so it can
+// be unit-tested; see that header for the scheme and for why an unparseable
+// version on either side deliberately means "no automatic update":
+//   - a home-compiled build ("11:20:03@Jun 17 2024") is never overwritten;
+//   - automatic updates can never move a device between distributions, since a
+//     reference-codebase vX.Y.Z never parses as our bm- CalVer and vice versa.
+// Moving between distributions stays possible from the update page, manually.
 bool fwNeedsUpdate(char * version) {
-    // version NEEDS to be in the format: vx.y.z[-RCa] where x, y, z, a are digits, multiple digits are allowed.
-    // valid versions are v3.6.10   v3.17.0-RC13
-    int latest_major, latest_minor, latest_patch, latest_rc, cur_major, cur_minor, cur_patch, cur_rc;
-    int hit = sscanf(version, "v%i.%i.%i-RC%i", &latest_major, &latest_minor, &latest_patch, &latest_rc);
-    _LOG_A("Firmware version detection hit=%i, LATEST version detected=v%i.%i.%i-RC%i.\n", hit, latest_major, latest_minor, latest_patch, latest_rc);
-    int hit2 = sscanf(VERSION, "v%i.%i.%i-RC%i", &cur_major, &cur_minor, &cur_patch, &cur_rc);
-    _LOG_A("Firmware version detection hit=%i, CURRENT version detected=v%i.%i.%i-RC%i.\n", hit2, cur_major, cur_minor, cur_patch, cur_rc);
-    if (hit != 3 || hit2 != 3)                                                  // we couldnt detect simple vx.y.z version nrs, either current or latest
-        return false;
-    if (cur_major > latest_major)
-        return false;
-    if (cur_major < latest_major)
-        return true;
-    if (cur_major == latest_major) {
-        if (cur_minor > latest_minor)
-            return false;
-        if (cur_minor < latest_minor)
-            return true;
-        if (cur_minor == latest_minor)
-            return (cur_patch < latest_patch);
-    }
-    return false;
+    bool needs = fw_version_needs_update(VERSION, version);
+    _LOG_A("Firmware update check: running=%s latest=%s -> %s.\n",
+           VERSION, version ? version : "(none)", needs ? "update" : "no update");
+    return needs;
 }
 
 /**
@@ -2581,22 +2569,22 @@ void loop() {
             char version[32];
             if (firmwareUpdateTimer == FW_UPDATE_DELAY) {                       // we now have to check for a new version
                 //timer is not reset, proceeds to 65535 which is approx 18h from now
-                if (getLatestVersion(String(String(OWNER_FACT) + "/" + String(REPO_FACT)), "", version)) {
+                if (getLatestVersion(OWN_DISTRIBUTION_REPO, OWN_FIRMWARE_ASSET, version)) {
                     if (fwNeedsUpdate(version)) {
                         _LOG_A("Firmware reports it needs updating, will update in %i seconds\n", FW_UPDATE_DELAY);
                         if (downloadUrl) { free(downloadUrl); downloadUrl = NULL; }
-                        asprintf(&downloadUrl, "%s/fact_firmware.signed.bin", FW_DOWNLOAD_PATH); //will be freed in FirmwareUpdate() ; format: http://s3.com/fact_firmware.debug.signed.bin
+                        asprintf(&downloadUrl, "%s/%s/%s/releases/download/%s/%s", GH_RELEASE_URL, OWNER_BASM, REPO_BASM, version, OWN_FIRMWARE_ASSET); //will be freed in FirmwareUpdate()
                     } else {
                         _LOG_A("Firmware reports it needs NO update!\n");
                         firmwareUpdateTimer = random(FW_UPDATE_DELAY + 36000, 0xffff);  // at least 10 hours in between checks
                     }
                 }
             } else if (firmwareUpdateTimer == 0) {                              // time to download & flash!
-                if (getLatestVersion(String(String(OWNER_FACT) + "/" + String(REPO_FACT)), "", version)) { // recheck version info
+                if (getLatestVersion(OWN_DISTRIBUTION_REPO, OWN_FIRMWARE_ASSET, version)) { // recheck version info
                     if (fwNeedsUpdate(version)) {
                         _LOG_A("Firmware reports it needs updating, starting update NOW!\n");
                         if (downloadUrl) { free(downloadUrl); downloadUrl = NULL; }
-                        asprintf(&downloadUrl, "%s/fact_firmware.signed.bin", FW_DOWNLOAD_PATH); //will be freed in FirmwareUpdate() ; format: http://s3.com/fact_firmware.debug.signed.bin
+                        asprintf(&downloadUrl, "%s/%s/%s/releases/download/%s/%s", GH_RELEASE_URL, OWNER_BASM, REPO_BASM, version, OWN_FIRMWARE_ASSET); //will be freed in FirmwareUpdate()
                         RunFirmwareUpdate();
                     } else {
                         _LOG_A("Firmware changed its mind, NOW it reports it needs NO update!\n");

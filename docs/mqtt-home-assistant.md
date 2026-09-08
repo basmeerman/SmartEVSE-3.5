@@ -137,6 +137,7 @@ All topics use prefix `SmartEVSE/<serial>/`.
 | `/CapacityMonthlyPeak` | int | W | measurement | Highest 15-min average this month |
 | `/CapacityHeadroom` | int | W | measurement | Remaining watts before hitting CapacityLimit |
 | `/StateID` | string | — | — | Raw state name (`A`, `B`, `C`, `B1`, `C1`, …) — the topic evcc.io reads. `/State` carries the human-readable text instead. |
+| `/Distribution` | string | — | — | Which firmware distribution this device runs (`basmeerman`). Pairs with `/FirmwareVersion` to identify a build unambiguously. |
 
 ### Command topics (Set)
 

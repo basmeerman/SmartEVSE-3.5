@@ -4,7 +4,7 @@ on:
   pull_request:
   push:
     branches: [master]
-    tags: ['v*']
+    tags: ['bm-*', 'v*']
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -303,7 +303,7 @@ jobs:
         timeout-minutes: 3
 
   version-check:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/bm-') || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4

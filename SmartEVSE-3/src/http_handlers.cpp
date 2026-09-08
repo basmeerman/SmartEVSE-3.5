@@ -18,6 +18,7 @@
 #include "diag_sampler.h"
 #include "diag_storage.h"
 #include "capacity_peak.h"
+#include "fw_version.h"
 #include "http_auth.h"          // Plan 16 Phase 1 — HTTP auth decision (pure C)
 #include "pin_rate_limit.h"     // Plan 16 Phase 2 — brute-force limiter for /lcd-verify-password
 #include <LittleFS.h>
@@ -240,6 +241,7 @@ bool handle_URI(struct mg_connection *c, struct mg_http_message *hm,  webServerR
 
         DynamicJsonDocument doc(4096); // https://arduinojson.org/v6/assistant/ (3200 + nodes + circuit_meter)
         doc["version"] = String(VERSION);
+        doc["distribution"] = FW_DISTRIBUTION;   // which build of the firmware this is
         doc["serialnr"] = serialnr;
         doc["mode"] = mode;
         doc["mode_id"] = modeId;
