@@ -22,6 +22,21 @@ static int http_auth_ascii_icmp(const char *a, size_t an, const char *b) {
     return (b[i] == '\0') ? 0 : -1;
 }
 
+/* Portal-mode URI allowlist. See http_auth.h.
+ *
+ * Deliberately an exact-match list rather than a prefix match: a prefix test
+ * would let "/saveXYZ" or "/erasesettings/../settings" through. The portal
+ * page is fully self-contained (inline CSS and script), so it needs no asset
+ * endpoints alongside these three. */
+bool http_portal_uri_allowed(const char *uri) {
+    if (uri == NULL || uri[0] == '\0') {
+        return false;
+    }
+    return strcmp(uri, "/") == 0 ||
+           strcmp(uri, "/save") == 0 ||
+           strcmp(uri, "/erasesettings") == 0;
+}
+
 /* Return true if `origin` is this device's own origin.
  *
  * Parses `origin` as `scheme://HOST[:PORT][/path...]` and compares the HOST

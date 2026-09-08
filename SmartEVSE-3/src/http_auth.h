@@ -60,6 +60,27 @@ typedef enum {
     HTTP_AUTH_DENY_SESSION_EXPIRED    = 3
 } http_auth_result_t;
 
+/*
+ * Portal-mode URI allowlist.
+ *
+ * While the device is in WiFi setup portal mode (WIFImode == 2) it runs an
+ * open access point with no credentials of any kind — anyone in radio range
+ * is on the network. Only the endpoints that the setup portal itself needs
+ * may be served in that state; everything else (settings, OTA, diagnostics,
+ * RFID, WebSocket upgrades) must be refused regardless of AuthMode, because
+ * there is no meaningful identity to authenticate against yet.
+ *
+ *   uri — request path, NUL-terminated, without query string
+ *
+ * Returns true when the URI is one the portal serves:
+ *   "/"              the credentials form
+ *   "/save"          form submission
+ *   "/erasesettings" factory reset, the documented way out of a broken portal
+ *
+ * A NULL or empty uri returns false.
+ */
+bool http_portal_uri_allowed(const char *uri);
+
 http_auth_result_t http_auth_decide(uint8_t        auth_mode,
                                     uint16_t       lcd_pin,
                                     bool           lcd_password_ok,

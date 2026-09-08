@@ -11,6 +11,7 @@
 #include "glcd.h"
 #include "esp32.h"
 #include "http_api.h"
+#include "http_auth.h"
 #include "reconnect_backoff.h"
 #include <ArduinoJson.h>
 
@@ -1485,6 +1486,25 @@ static void fn_http_server(struct mg_connection *c, int ev, void *ev_data) {
     // END PLAN-07
   } else if (ev == MG_EV_HTTP_MSG) {  // New HTTP request received
     struct mg_http_message *hm = (struct mg_http_message *) ev_data;            // Parsed HTTP request
+
+    // Portal mode runs an OPEN access point: anyone in radio range is on the
+    // network and there is no identity to authenticate against, so AuthMode
+    // cannot help here. Serve only what the setup portal itself needs and
+    // refuse everything else — settings, OTA, diagnostics, RFID and the
+    // WebSocket upgrades below included. (upstream e36a3cb)
+    if (WIFImode == 2) {
+        char portal_uri[64];
+        size_t uri_len = hm->uri.len < sizeof(portal_uri) - 1 ? hm->uri.len : sizeof(portal_uri) - 1;
+        memcpy(portal_uri, hm->uri.buf, uri_len);
+        portal_uri[uri_len] = '\0';
+        // A URI too long to fit the buffer is truncated, so it can never
+        // compare equal to one of the short allowlist entries -> refused.
+        if (!http_portal_uri_allowed(portal_uri)) {
+            _LOG_A("Portal mode: refusing %s\n", portal_uri);
+            mg_http_reply(c, 403, "Content-Type: text/plain\r\n", "Not available in portal mode");
+            return;
+        }
+    }
 
     // Check for websocket upgrade request for LCD image stream
     if (mg_match(hm->uri, mg_str("/ws/lcd"), NULL)) {
