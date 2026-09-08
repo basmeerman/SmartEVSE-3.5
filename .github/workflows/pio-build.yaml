@@ -42,19 +42,50 @@ jobs:
       - name: Get version
         id: version
         shell: bash
+        # Produces the full VERSION string, prefix included, so the flag below can
+        # use it verbatim.
+        #
+        # bm-* tags are CalVer (bm-YYYY.MM.N) and are NOT semver: reconstructing
+        # them from the major/minor/patch outputs of a semver parser yields a
+        # mangled string, and the firmware would then report a version that does
+        # not match its own tag and does not parse as this distribution's scheme —
+        # which would silently disable automatic updates. Take the tag as-is.
         run: |
-              if [ -z "${{ inputs.major }}" ]
+              TAG="${GITHUB_REF##*/}"
+              if [[ "$GITHUB_REF" == refs/tags/bm-* ]]
               then
-                 echo "version=${{ steps.time.outputs.time }}" >> $GITHUB_OUTPUT
-               else
+                 echo "version=${TAG}" >> $GITHUB_OUTPUT
+              elif [ -z "${{ inputs.major }}" ]
+              then
+                 echo "version=v${{ steps.time.outputs.time }}" >> $GITHUB_OUTPUT   # local/dev build, keeps the legacy v-prefix
+              else
                  if [ -z "${{ inputs.prerelease }}" ]
                  then
-                    echo "version=${{ inputs.major }}.${{ inputs.minor }}.${{ inputs.patch }}" >> $GITHUB_OUTPUT
+                    echo "version=v${{ inputs.major }}.${{ inputs.minor }}.${{ inputs.patch }}" >> $GITHUB_OUTPUT
                  else
-                    echo "version=${{ inputs.major }}.${{ inputs.minor }}.${{ inputs.patch }}-${{ inputs.prerelease }}" >> $GITHUB_OUTPUT
+                    echo "version=v${{ inputs.major }}.${{ inputs.minor }}.${{ inputs.patch }}-${{ inputs.prerelease }}" >> $GITHUB_OUTPUT
                  fi
               fi
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Assert release version matches platformio.ini
+        # The release build overrides VERSION via PLATFORMIO_BUILD_FLAGS, so the
+        # string burned into the firmware can diverge from the one in
+        # platformio.ini that ci.yaml's version-check validates against the tag.
+        # This closes that loop: for a bm-* tag the three must agree.
+        if: startsWith(github.ref, 'refs/tags/bm-')
+        shell: bash
+        run: |
+          set -e
+          ini_version=$(grep -oP '(?<=-DVERSION=\\")[^\\]+' SmartEVSE-3/platformio.ini)
+          built_version="${{ steps.version.outputs.version }}"
+          echo "platformio.ini: $ini_version"
+          echo "build flag:     $built_version"
+          if [ "$ini_version" != "$built_version" ]; then
+            echo "ERROR: firmware would report '$built_version' but platformio.ini declares '$ini_version'."
+            echo "Update VERSION in SmartEVSE-3/platformio.ini to match the tag before releasing."
+            exit 1
+          fi
+          echo "OK: version string is consistent."
       - name: Cache pip
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
@@ -79,7 +110,7 @@ jobs:
           pip install --upgrade platformio
       - name: Build normal version
         run: |
-          PLATFORMIO_BUILD_FLAGS='-DVERSION=\"v${{ steps.version.outputs.version }}\" -DDBG=0' pio run -d SmartEVSE-3/
+          PLATFORMIO_BUILD_FLAGS='-DVERSION=\"${{ steps.version.outputs.version }}\" -DDBG=0' pio run -d SmartEVSE-3/
           mkdir -p ./SmartEVSE-3/distribution
       - name: Sign normal version
         env:
@@ -98,7 +129,7 @@ jobs:
         run: mv ./SmartEVSE-3/.pio/build/release/*.bin ./SmartEVSE-3/distribution
       - name: Build debug version
         run: |
-          PLATFORMIO_BUILD_FLAGS='-DVERSION=\"v${{ steps.version.outputs.version }}\" -DDBG=1' pio run -d SmartEVSE-3/
+          PLATFORMIO_BUILD_FLAGS='-DVERSION=\"${{ steps.version.outputs.version }}\" -DDBG=1' pio run -d SmartEVSE-3/
       - name: Sign debug version
         env:
           super_secret: ${{ secrets.SECRET_RSA_KEY }}
