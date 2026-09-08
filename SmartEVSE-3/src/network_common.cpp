@@ -1668,7 +1668,7 @@ static void fn_http_server(struct mg_connection *c, int ev, void *ev_data) {
                 } else if (is_unsigned_upload && unsigned_allowed) {
                     if (!offset) {
                         _LOG_A("Update Start (UNSIGNED, debug+PIN): %s\n", file);
-                        if (!Update.begin((ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000), U_FLASH) {
+                        if (!Update.begin(((ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000), U_FLASH)) {
                             _LOG_A("ERROR: Update has error:%s.\n", Update.errorString());
                             Update.printError(Serial);
                         }
@@ -1703,7 +1703,7 @@ static void fn_http_server(struct mg_connection *c, int ev, void *ev_data) {
                         hm->body.len = hm->body.len - SIGNATURE_LENGTH;
                         _LOG_A("Firmware signature:");
                         dump(signature);
-                        if(!Update.begin((ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000), U_FLASH) {
+                        if (!Update.begin(((ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000), U_FLASH)) {
                             _LOG_A("ERROR: Update has error:%s.\n", Update.errorString());
                             Update.printError(Serial);
                             FREE(signature);

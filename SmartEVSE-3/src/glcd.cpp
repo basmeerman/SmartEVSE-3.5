@@ -730,7 +730,7 @@ void GLCD(void) {
                         }
                         if (DelayedStartTime.epoch2 && LocalTimeSet && DelayedStartTime.epoch2 != DelayedStartTime_Old) {
                             time_t epoch = DelayedStartTime.epoch2 + EPOCH2_OFFSET;
-                            DelayedStartTimeTM = *localtime(&epoch);
+                            localtime_r(&epoch, &DelayedStartTimeTM);           //thread-safe: localtime() returns a shared static
                         }
                         if (!strftime(Str, sizeof(Str), StrFormat.c_str(), &DelayedStartTimeTM))
                             snprintf(Str, sizeof(Str), "later...");
@@ -1355,7 +1355,7 @@ void GLCDMenu(uint8_t Buttons) {
             if (LCDNav == MENU_EXIT) {                                          // Exit Main Menu
                 LCDNav = 0;
                 SubMenu = 0;
-                clearErrorFlags(!(NO_ERROR));                                           // Clear All Errors when exiting the Main Menu
+                clearErrorFlags(0xFF);                                                  // Clear All Errors when exiting the Main Menu
                 TestState = 0;                                                  // Clear TestState
                 setChargeDelay(0);                                              // Clear ChargeDelay
                 setSolarStopTimer(0);                                           // Disable Solar Timer

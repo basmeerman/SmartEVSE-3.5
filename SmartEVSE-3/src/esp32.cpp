@@ -1668,7 +1668,9 @@ int StoreTimeString(String DelayedTimeStr, DelayedTimeStruct *DelayedTime) {
         DelayedTime->epoch2 = mktime(&delayedtime_tm) - EPOCH2_OFFSET;
         // Compare the times
         time_t now = time(nullptr);             //get current local time
-        DelayedTime->diff = DelayedTime->epoch2 - (mktime(localtime(&now)) - EPOCH2_OFFSET);
+        struct tm now_tm;
+        localtime_r(&now, &now_tm);             //thread-safe: localtime() returns a shared static
+        DelayedTime->diff = DelayedTime->epoch2 - (mktime(&now_tm) - EPOCH2_OFFSET);
         return 0;
     }
     //error TODO not sure whether we keep the old time or reset it to zero?
@@ -2536,7 +2538,9 @@ void loop() {
         if (DelayedStartTime.epoch2 && LocalTimeSet) {
             // Compare the times
             time_t now = time(nullptr);             //get current local time
-            DelayedStartTime.diff = DelayedStartTime.epoch2 - (mktime(localtime(&now)) - EPOCH2_OFFSET);
+            struct tm now_tm;
+            localtime_r(&now, &now_tm);         //thread-safe: localtime() returns a shared static
+            DelayedStartTime.diff = DelayedStartTime.epoch2 - (mktime(&now_tm) - EPOCH2_OFFSET);
             if (DelayedStartTime.diff > 0) {
                 if (AccessStatus != OFF && (DelayedStopTime.epoch2 == 0 || DelayedStopTime.epoch2 > DelayedStartTime.epoch2))
                     setAccess(OFF);                         //switch to OFF, we are Delayed Charging
@@ -2554,7 +2558,9 @@ void loop() {
         if (DelayedStopTime.epoch2 && LocalTimeSet) {
             // Compare the times
             time_t now = time(nullptr);             //get current local time
-            DelayedStopTime.diff = DelayedStopTime.epoch2 - (mktime(localtime(&now)) - EPOCH2_OFFSET);
+            struct tm now_tm;
+            localtime_r(&now, &now_tm);         //thread-safe: localtime() returns a shared static
+            DelayedStopTime.diff = DelayedStopTime.epoch2 - (mktime(&now_tm) - EPOCH2_OFFSET);
             if (DelayedStopTime.diff <= 0) {
                 //DelayedStopTime has passed
                 if (DelayedRepeat == 1)                                         //we are on a daily repetition schedule
