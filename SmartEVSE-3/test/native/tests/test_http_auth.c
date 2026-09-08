@@ -342,6 +342,69 @@ void test_auth_csrf_matching_host_with_trailing_slash_allowed(void) {
             "smartevse.local"));
 }
 
+/* ---- Portal-mode URI allowlist (upstream e36a3cb) ---- */
+
+/*
+ * @feature HTTP Authentication
+ * @req REQ-AUTH-031
+ * @scenario The three endpoints the setup portal needs are served in portal mode
+ * @given The device is in WiFi setup portal mode
+ * @when http_portal_uri_allowed is called with "/", "/save" and "/erasesettings"
+ * @then All three are allowed
+ */
+void test_portal_allows_setup_endpoints(void) {
+    TEST_ASSERT_TRUE(http_portal_uri_allowed("/"));
+    TEST_ASSERT_TRUE(http_portal_uri_allowed("/save"));
+    TEST_ASSERT_TRUE(http_portal_uri_allowed("/erasesettings"));
+}
+
+/*
+ * @feature HTTP Authentication
+ * @req REQ-AUTH-032
+ * @scenario Mutating and sensitive endpoints are refused while the portal AP is open
+ * @given The device is in portal mode, running an open access point with no credentials
+ * @when http_portal_uri_allowed is called with settings, OTA, diagnostic and RFID paths
+ * @then Every one of them is refused
+ */
+void test_portal_blocks_mutating_endpoints(void) {
+    TEST_ASSERT_FALSE(http_portal_uri_allowed("/settings"));
+    TEST_ASSERT_FALSE(http_portal_uri_allowed("/update"));
+    TEST_ASSERT_FALSE(http_portal_uri_allowed("/reboot"));
+    TEST_ASSERT_FALSE(http_portal_uri_allowed("/rfid"));
+    TEST_ASSERT_FALSE(http_portal_uri_allowed("/diag/stream"));
+    TEST_ASSERT_FALSE(http_portal_uri_allowed("/ws/data"));
+    TEST_ASSERT_FALSE(http_portal_uri_allowed("/currents"));
+}
+
+/*
+ * @feature HTTP Authentication
+ * @req REQ-AUTH-033
+ * @scenario The allowlist matches exactly, so no path can be extended past it
+ * @given An attacker appends to or nests under an allowed path
+ * @when http_portal_uri_allowed is called with "/saveXYZ", "/save/settings" and
+ *       "/erasesettings/../settings"
+ * @then All are refused — the check is exact-match, not a prefix test
+ */
+void test_portal_allowlist_is_exact_match(void) {
+    TEST_ASSERT_FALSE(http_portal_uri_allowed("/saveXYZ"));
+    TEST_ASSERT_FALSE(http_portal_uri_allowed("/save/settings"));
+    TEST_ASSERT_FALSE(http_portal_uri_allowed("/erasesettings/../settings"));
+    TEST_ASSERT_FALSE(http_portal_uri_allowed("//"));
+}
+
+/*
+ * @feature HTTP Authentication
+ * @req REQ-AUTH-034
+ * @scenario A missing or empty URI is refused rather than defaulting to allowed
+ * @given The caller passes NULL or an empty string
+ * @when http_portal_uri_allowed is called
+ * @then Both are refused
+ */
+void test_portal_null_and_empty_uri_refused(void) {
+    TEST_ASSERT_FALSE(http_portal_uri_allowed(NULL));
+    TEST_ASSERT_FALSE(http_portal_uri_allowed(""));
+}
+
 int main(void) {
     TEST_SUITE_BEGIN("HTTP Auth");
 
@@ -369,6 +432,10 @@ int main(void) {
     RUN_TEST(test_auth_csrf_case_insensitive_match_allowed);
     RUN_TEST(test_auth_csrf_matching_host_with_port_allowed);
     RUN_TEST(test_auth_csrf_matching_host_with_trailing_slash_allowed);
+    RUN_TEST(test_portal_allows_setup_endpoints);
+    RUN_TEST(test_portal_blocks_mutating_endpoints);
+    RUN_TEST(test_portal_allowlist_is_exact_match);
+    RUN_TEST(test_portal_null_and_empty_uri_refused);
 
     TEST_SUITE_RESULTS();
 }
