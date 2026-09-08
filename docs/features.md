@@ -229,6 +229,11 @@ WiFi-only setup — no RS485 Modbus wiring required.
   response, derived from STATE_C/STATE_C1.
 - **Ready-to-use EVCC template** — complete `evcc.yaml` custom charger
   template included in documentation.
+- **`StateID` MQTT topic** — raw state name (`A`, `B`, `C`, `B1`, `C1`, …) for
+  evcc setups that read MQTT rather than the REST API. Topic name and value
+  both match the reference codebase so existing evcc templates work unchanged.
+  Note this is the internal state name, not the IEC 61851 letter — for that,
+  use `iec61851_state` in the GET `/settings` response.
 
 Configuration: [EVCC Integration](evcc-integration.md)
 

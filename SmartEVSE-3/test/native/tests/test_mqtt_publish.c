@@ -168,6 +168,35 @@ void test_slot_count_within_bounds(void) {
     TEST_ASSERT_TRUE(MQTT_SLOT_COUNT <= MQTT_CACHE_MAX_SLOTS);
 }
 
+/*
+ * @feature MQTT Change-Only Publishing
+ * @req REQ-MQTT-021
+ * @scenario The evcc StateID topic is published only when the state changes
+ * @given A fresh publish cache and the EVSE reporting state "B"
+ * @when MQTT_SLOT_STATE_ID is published three times — "B", "B" again, then "C"
+ * @then The first and third publish, the repeat is suppressed
+ */
+void test_state_id_publishes_on_change_only(void) {
+    mqtt_cache_init(&cache, 60);
+    TEST_ASSERT_TRUE(mqtt_should_publish_str(&cache, MQTT_SLOT_STATE_ID, "B", 100));
+    TEST_ASSERT_FALSE(mqtt_should_publish_str(&cache, MQTT_SLOT_STATE_ID, "B", 101));
+    TEST_ASSERT_TRUE(mqtt_should_publish_str(&cache, MQTT_SLOT_STATE_ID, "C", 102));
+}
+
+/*
+ * @feature MQTT Change-Only Publishing
+ * @req REQ-MQTT-022
+ * @scenario StateID and State occupy distinct cache slots
+ * @given A fresh publish cache
+ * @when The same payload is published to MQTT_SLOT_STATE and MQTT_SLOT_STATE_ID
+ * @then Both publish — one slot's cached value never suppresses the other
+ */
+void test_state_id_slot_is_independent_of_state(void) {
+    mqtt_cache_init(&cache, 60);
+    TEST_ASSERT_TRUE(mqtt_should_publish_str(&cache, MQTT_SLOT_STATE, "Charging", 100));
+    TEST_ASSERT_TRUE(mqtt_should_publish_str(&cache, MQTT_SLOT_STATE_ID, "Charging", 100));
+}
+
 int main(void) {
     TEST_SUITE_BEGIN("MQTT Publish Cache");
 
@@ -181,6 +210,8 @@ int main(void) {
     RUN_TEST(test_crc16_consistency);
     RUN_TEST(test_invalid_slot_rejected);
     RUN_TEST(test_slot_count_within_bounds);
+    RUN_TEST(test_state_id_publishes_on_change_only);
+    RUN_TEST(test_state_id_slot_is_independent_of_state);
 
     TEST_SUITE_RESULTS();
 }

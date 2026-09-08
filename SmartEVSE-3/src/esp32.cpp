@@ -916,6 +916,7 @@ void SetupMQTTClient() {
     MQTTclient.announce("EV Plug State", "sensor", optional_payload);
     MQTTclient.announce("Access", "sensor", optional_payload);
     MQTTclient.announce("State", "sensor", optional_payload);
+    MQTTclient.announce("StateID", "sensor", optional_payload);     // raw state letter/name, read by evcc.io
     MQTTclient.announce("RFID", "sensor", optional_payload);
     MQTTclient.announce("RFIDLastRead", "sensor", optional_payload);
     MQTTclient.announce("NrOfPhases", "sensor", optional_payload);
@@ -1141,6 +1142,10 @@ void mqttPublishData() {
             mqtt_pub_str(MQTT_SLOT_RFID_LAST_READ, "/RFIDLastRead", buf, true, now_s);
         }
         mqtt_pub_str(MQTT_SLOT_STATE, "/State", getStateNameWeb(State), true, now_s);
+        // Raw state name ("A", "B", "C", "B1", "C1", ...) rather than the
+        // human-readable /State text. evcc.io reads this topic; the name and
+        // the value both match upstream so evcc templates work unmodified.
+        mqtt_pub_str(MQTT_SLOT_STATE_ID, "/StateID", getStateName(State), true, now_s);
         mqtt_pub_str(MQTT_SLOT_ERROR, "/Error", getErrorNameWeb(ErrorFlags), true, now_s);
         mqtt_pub_str(MQTT_SLOT_EV_PLUG_STATE, "/EVPlugState", (pilot != PILOT_12V) ? "Connected" : "Disconnected", true, now_s);
         mqtt_pub_str(MQTT_SLOT_WIFI_SSID, "/WiFiSSID", WiFi.SSID().c_str(), true, now_s);
