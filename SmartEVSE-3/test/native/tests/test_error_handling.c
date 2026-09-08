@@ -92,6 +92,40 @@ void test_clear_preserves_other_flags(void) {
     TEST_ASSERT_FALSE(ctx.ErrorFlags & LESS_6A);
 }
 
+/*
+ * @feature Error Handling & Safety
+ * @req REQ-ERR-031
+ * @scenario Clearing with a full bitmask clears every error flag at once
+ * @given The EVSE has TEMP_HIGH, LESS_6A, CT_NOCOMM and RCM_TRIPPED set
+ * @when evse_clear_error_flags is called with 0xFF
+ * @then ErrorFlags is NO_ERROR
+ */
+void test_clear_all_flags_with_full_mask(void) {
+    evse_init(&ctx, NULL);
+    ctx.ErrorFlags = TEMP_HIGH | LESS_6A | CT_NOCOMM | RCM_TRIPPED;
+    evse_clear_error_flags(&ctx, 0xFF);
+    TEST_ASSERT_EQUAL_INT(NO_ERROR, ctx.ErrorFlags);
+}
+
+/*
+ * @feature Error Handling & Safety
+ * @req REQ-ERR-032
+ * @scenario A mask of 1 clears only LESS_6A, never "all errors"
+ * @given The EVSE has TEMP_HIGH, LESS_6A and CT_NOCOMM set
+ * @when evse_clear_error_flags is called with !(NO_ERROR), which evaluates to 1 —
+ *       the mistake that left the LCD menu-exit path clearing a single bit
+ * @then Only LESS_6A is cleared; TEMP_HIGH and CT_NOCOMM survive
+ */
+void test_clear_mask_one_is_not_clear_all(void) {
+    evse_init(&ctx, NULL);
+    ctx.ErrorFlags = TEMP_HIGH | LESS_6A | CT_NOCOMM;
+    evse_clear_error_flags(&ctx, !(NO_ERROR));
+    TEST_ASSERT_FALSE(ctx.ErrorFlags & LESS_6A);
+    TEST_ASSERT_TRUE((ctx.ErrorFlags & TEMP_HIGH) != 0);
+    TEST_ASSERT_TRUE((ctx.ErrorFlags & CT_NOCOMM) != 0);
+    TEST_ASSERT_TRUE(ctx.ErrorFlags != NO_ERROR);
+}
+
 // ---- ChargeDelay countdown ----
 
 /*
@@ -586,6 +620,8 @@ int main(void) {
     RUN_TEST(test_set_multiple_error_flags);
     RUN_TEST(test_clear_error_flags);
     RUN_TEST(test_clear_preserves_other_flags);
+    RUN_TEST(test_clear_all_flags_with_full_mask);
+    RUN_TEST(test_clear_mask_one_is_not_clear_all);
     RUN_TEST(test_charge_delay_counts_down);
     RUN_TEST(test_charge_delay_stops_at_zero);
     RUN_TEST(test_charge_delay_blocks_A_to_B);
