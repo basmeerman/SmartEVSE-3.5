@@ -40,19 +40,14 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for workflow and submission guidelines.
 
 ## Platform Guards
 
-The codebase targets both ESP32 (v3/v4) and CH32. Use the established guard pattern:
-
-```c
-#ifdef SMARTEVSE_VERSION
-    // ESP32-specific code (SMARTEVSE_VERSION is 30 or 40)
-#else
-    // CH32-specific code
-#endif
-```
+The codebase targets the ESP32 of SmartEVSE v3 only. The v4 / CH32 target was
+removed in September 2026, so `SMARTEVSE_VERSION` is always 30 and there are no
+version guards left to add — **do not reintroduce them**.
 
 The bridge layer (`evse_state_machine.c` + `evse_bridge.h`) keeps platform-specific
-code out of core logic. New state-machine logic should go through bridge functions
-rather than using `#ifdef` directly.
+code out of core logic. Hardware access belongs in the bridge and glue layers; new
+state-machine logic should go through bridge functions rather than using `#ifdef`
+directly.
 
 ## Module Extraction Pattern
 

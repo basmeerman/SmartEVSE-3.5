@@ -24,7 +24,7 @@ Structural changes that affect the entire codebase — not specific features.
 | State representation | ~70 scattered globals | `evse_ctx_t` context struct |
 | Hardware abstraction | Direct GPIO calls in logic | Function pointers via HAL callbacks |
 | Global synchronization | No protection | `evse_bridge.cpp` with spinlock/mutex |
-| Native testability | Not possible (Arduino dependencies) | 1,096 tests compile with plain `gcc` |
+| Native testability | Not possible (Arduino dependencies) | 1,247 tests compile with plain `gcc` |
 | CI pipeline | PlatformIO build only | 10-job pipeline (tests, sanitizers, valgrind, cppcheck, builds, BDD, traceability, OCPP, Modbus) |
 | Test methodology | None | Specification-by-Example (SbE) with traceability |
 
