@@ -19,11 +19,13 @@ def all_meter_profiles():
     from meter_profiles import abb_b23, finder_7e, phoenix_contact, sinotimer
     from meter_profiles import solaredge, wago, schneider, finder_7m
     from meter_profiles import chint, carlo_gavazzi, custom, orno_3p, orno_1p
+    from meter_profiles import chint_1p
 
     profiles = {}
     for mod in [eastron_sdm630, eastron_sdm120, sensorbox_v2,
                 abb_b23, finder_7e, phoenix_contact, sinotimer,
                 solaredge, wago, schneider, finder_7m,
-                chint, carlo_gavazzi, custom, orno_3p, orno_1p]:
+                chint, carlo_gavazzi, custom, orno_3p, orno_1p,
+                chint_1p]:
         profiles[mod.METER_TYPE] = mod
     return profiles

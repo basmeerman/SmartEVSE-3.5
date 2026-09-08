@@ -32,11 +32,12 @@ struct EMstruct EMConfig[] = {
     {"HmWzrd P1", ENDIANESS_HBF_HWF, 0, MB_DATATYPE_INT16,        0, 0,      0, 0,      0, 0,      0, 0,     0, 0}, // Homewizard P1 - network connected
 
     {"Schneider", ENDIANESS_HBF_HWF, 3, MB_DATATYPE_FLOAT32, 0x0BD3, 0, 0x0BB7, 0, 0x0BF3,-3, 0xB02B, 0,0xB02D, 0}, // Schneider iEM3x5x series (V / A / kW / kWh) iEM3x50 counts only Energy Import, no Export
-    {"Chint",     ENDIANESS_HBF_HWF, 3, MB_DATATYPE_FLOAT32, 0x2000, 1, 0x200C, 3, 0x2012, 1, 0x101E, 0,0x1028, 0}, // Chint DTSU666 (0.1V / mA / 0.1W / kWh)
+    {"Chint 3P",  ENDIANESS_HBF_HWF, 3, MB_DATATYPE_FLOAT32, 0x2000, 1, 0x200C, 3, 0x2012, 1, 0x101E, 0,0x1028, 0}, // Chint DTSU666 (0.1V / mA / 0.1W / kWh)
     {"C.Gavazzi", ENDIANESS_HBF_LWF, 4, MB_DATATYPE_INT32,      0x0, 1,    0xC, 3,   0x28, 1,   0x34, 1,  0x4E, 1}, // Carlo Gavazzi EM340 (0.1V / mA / 0.1W / 0.1kWh) 
     {"Orno 3P",   ENDIANESS_HBF_HWF, 4, MB_DATATYPE_FLOAT32,    0x0, 0,  0x0C, 0,   0x1C, 0, 0x0100, 0,0x0110, 0}, // Orno OR-WE-517 (V / A / W / kWh) 3-phase bidirectional
     {"Orno 1P",   ENDIANESS_HBF_HWF, 4, MB_DATATYPE_FLOAT32,    0x0, 0,  0x06, 0,   0x0C, 0, 0x0100, 0,0x0110, 0}, // Orno OR-WE-516 (V / A / W / kWh) 1-phase bidirectional
-    {"Custom",    ENDIANESS_LBF_LWF, 4, MB_DATATYPE_INT32,        0, 0,      0, 0,      0, 0,      0, 0,     0, 0}  // Last entry!
+    {"Custom",    ENDIANESS_LBF_LWF, 4, MB_DATATYPE_INT32,        0, 0,      0, 0,      0, 0,      0, 0,     0, 0}, // EM_CUSTOM, user-configurable
+    {"Chint 1P",  ENDIANESS_HBF_HWF, 3, MB_DATATYPE_FLOAT32, 0x2000, 1, 0x2002, 0, 0x2004,-3, 0x4000, 0,0x400A, 0}  // Chint DDSU666 (0.1V / A / kW / kWh) - Last entry!
 };
 // WARNING: ONLY ADD new meters to the END of this ARRAY. The row number is stored in the config of the user, if you change the order YOU WILL RUIN THE CONFIGS OF USERS !!!!!!!
 
@@ -254,6 +255,11 @@ uint8_t Meter::receiveCurrentMeasurement(ModBus MB) {
             }
             break;
         }
+        case EM_CHINT_1P:                                                   // single phase: only L1 is reported
+            var[0] = decodeMeasurement(buf, 0, EMConfig[Type].IDivisor - 3);
+            var[1] = 0;
+            var[2] = 0;
+            break;
         default:
             for (x = 0; x < 3; x++) {
                 var[x] = decodeMeasurement(buf, x, EMConfig[Type].IDivisor - 3);
@@ -282,12 +288,18 @@ uint8_t Meter::receiveCurrentMeasurement(ModBus MB) {
         case EM_SCHNEIDER:
             offset = 27u;
             break;
-        case EM_CHINT:
+        case EM_CHINT_3P:
             offset = 4u;
             break;
             
     }
-    if (offset) {                                                               // this is one of the meters that has to measure power to determine current direction
+    if (Type == EM_CHINT_1P) {                                                  // single phase meter: current and power come back in one response
+        Power[0] = decodeMeasurement(buf, 1, EMConfig[Type].PDivisor);
+        Power[1] = 0;
+        Power[2] = 0;
+        PowerMeasured = Power[0];
+        if (Power[0] < 0) var[0] = -var[0];                                     // power sign gives the current direction
+    } else if (offset) {                                                        // this is one of the meters that has to measure power to determine current direction
         PowerMeasured = 0;                                                      // so we calculate PowerMeasured so we dont have to poll for this again
         for (x = 0; x < 3; x++) {
             Power[x] = decodeMeasurement(buf, x + offset, EMConfig[Type].PDivisor);

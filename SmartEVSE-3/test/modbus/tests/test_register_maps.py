@@ -17,6 +17,7 @@ from meter_profiles import (
     abb_b23, finder_7e, phoenix_contact, sinotimer,
     solaredge, wago, schneider, finder_7m,
     chint, carlo_gavazzi, orno_3p, orno_1p, custom,
+    chint_1p,
 )
 
 
@@ -119,6 +120,7 @@ class TestAllProfilesHaveTestVectors:
         abb_b23, finder_7e, phoenix_contact, sinotimer,
         solaredge, wago, schneider, finder_7m,
         chint, carlo_gavazzi, orno_3p, orno_1p, custom,
+        chint_1p,
     ]
 
     @pytest.mark.parametrize("profile",

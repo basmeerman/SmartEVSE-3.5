@@ -174,9 +174,9 @@ Configuration: [MQTT & Home Assistant](mqtt-home-assistant.md)
 
 ### Base Features
 
-- **18 supported meter types** via Modbus RTU — Eastron SDM630/SDM120, ABB B23,
-  Finder 7E/7M, Phoenix Contact, Schneider, Chint, Carlo Gavazzi, SolarEdge,
-  WAGO, Sinotimer, Orno WE-517/516, and Custom
+- **19 supported meter types** via Modbus RTU — Eastron SDM630/SDM120, ABB B23,
+  Finder 7E/7M, Phoenix Contact, Schneider, Chint DTSU666 (3P) and DDSU666 (1P),
+  Carlo Gavazzi, SolarEdge, WAGO, Sinotimer, Orno WE-517/516, and Custom
 - **HomeWizard P1** — WiFi/HTTP smart meter support
 - **Sensorbox v1/v2** — CT or P1 input
 - **API/MQTT external feed** — external current data via REST or MQTT
@@ -185,6 +185,11 @@ Configuration: [MQTT & Home Assistant](mqtt-home-assistant.md)
 
 - **New meter types: Orno WE-517 (3P) and WE-516 (1P)** — community-requested
   bidirectional energy meters.
+- **Chint DDSU666 (1P)** — single-phase sibling of the DTSU666. Current and
+  power arrive in one Modbus response, and the power sign gives the current
+  direction. Occupies meter slot 20, not upstream's slot 17, because 17/18 are
+  the Orno meters here — see
+  [upstream differences](upstream-differences.md#metering--modbus).
 - **Pure C Modbus frame decoder** — `ModbusDecode()` extracted to
   `modbus_decode.c` for native testability, supporting FC03/04/06/10 and
   exception frames.
@@ -300,7 +305,7 @@ addresses two needs:
 
 **Key design points:**
 
-- Reuses the existing `Meter` class — supports all 19 meter types (Eastron, ABB,
+- Reuses the existing `Meter` class — supports all 20 meter types (Eastron, ABB,
   Finder, Orno, Custom, etc.) with zero new meter code
 - Zero runtime cost when disabled (`CircuitMeter` type = 0, the default)
 - Integrates with load balancing: `MaxCircuitMains` acts as an additional current

@@ -43,11 +43,16 @@
 #define EM_SINOTIMER 12
 #define EM_HOMEWIZARD_P1 13
 #define EM_SCHNEIDER 14
-#define EM_CHINT 15
+#define EM_CHINT_3P 15
 #define EM_CARLO_CAVAZZI 16
 #define EM_ORNO3P 17
 #define EM_ORNO1P 18
 #define EM_CUSTOM 19
+/* Appended after EM_CUSTOM on purpose. Upstream put its Chint DDSU666 in slot
+ * 17, but this fork has used 17/18 for the Orno meters since Plan 05, and the
+ * meter type is persisted in NVS — reusing 17 would silently reinterpret an
+ * existing Orno configuration as a Chint one. See docs/upstream-differences.md. */
+#define EM_CHINT_1P 20
 
 typedef enum mb_datatype {
     MB_DATATYPE_INT32 = 0,

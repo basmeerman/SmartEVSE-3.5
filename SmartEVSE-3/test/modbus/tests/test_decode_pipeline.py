@@ -24,6 +24,7 @@ from meter_profiles import (
     abb_b23, finder_7e, phoenix_contact, sinotimer,
     solaredge, wago, schneider, finder_7m,
     chint, carlo_gavazzi, orno_3p, orno_1p, custom,
+    chint_1p,
 )
 
 
@@ -230,6 +231,7 @@ ALL_CURRENT_PROFILES = [
     eastron_sdm630, eastron_sdm120, abb_b23, finder_7e,
     phoenix_contact, sinotimer, wago, schneider, finder_7m,
     chint, carlo_gavazzi, orno_3p, orno_1p, custom,
+    chint_1p,
 ]
 
 PROFILE_IDS = [p.METER_NAME for p in ALL_CURRENT_PROFILES]
