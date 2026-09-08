@@ -130,6 +130,55 @@ ocpp_validate_result_t ocpp_validate_chargebox_id(const char *cb_id);
  */
 ocpp_validate_result_t ocpp_validate_auth_key(const char *auth_key);
 
+/* ---- BootNotification meter identity ---- */
+
+/*
+ * OCPP 1.6 caps meterType and meterSerialNumber at CiString25.
+ */
+#define OCPP_METER_FIELD_MAX 25
+
+/*
+ * Validate a meterType / meterSerialNumber value entered by the operator.
+ *
+ * Empty is valid and means "not set" — the resolver below then falls back to
+ * the built-in meter name, or omits the serial entirely.
+ */
+ocpp_validate_result_t ocpp_validate_meter_field(const char *value);
+
+/*
+ * Decide what BootNotification should report for the connected EV meter.
+ *
+ * The firmware knows its meter only by the short display name in EMConfig[]
+ * ("Eastron3P"), which is a UI label capped at 10 characters — not the
+ * type-approved model designation an inboekdienstverlener needs to match
+ * against a MID conformity declaration ("Eastron SDM72D-M-MID"), and the meter's
+ * serial number is not readable over Modbus at all. Both therefore have to come
+ * from the operator, who has the meter's type plate in front of them.
+ *
+ *   manual          — operator enabled manual meter identity
+ *   type_override   — operator-entered model designation, may be NULL or empty
+ *   serial_override — operator-entered serial number, may be NULL or empty
+ *   default_name    — EMConfig[].Desc for the configured EV meter
+ *
+ * On return:
+ *   *out_type   — string to publish as meterType (never NULL; falls back to
+ *                 default_name)
+ *   *out_serial — string to publish as meterSerialNumber, or NULL to omit the
+ *                 field. Publishing an empty or placeholder serial would be
+ *                 worse than omitting it: it looks like an answer during a
+ *                 fraud-prevention check that is meant to be document-backed.
+ *
+ * Note this is an operator declaration, not a device-verified fact. The charger
+ * cannot read a MID certificate; it can only report what it was told, so that
+ * the session data corroborates the paperwork submitted at onboarding.
+ */
+void ocpp_resolve_meter_identity(bool        manual,
+                                 const char *type_override,
+                                 const char *serial_override,
+                                 const char *default_name,
+                                 const char **out_type,
+                                 const char **out_serial);
+
 /* ---- IEC 61851 → OCPP StatusNotification mapping ---- */
 
 /*

@@ -125,6 +125,13 @@ safety, configure these on the device LCD during initial installation.
 | OCPP mode | Disabled / Enabled | Disabled | — | RW | RW | — | Yes | | OCPP 1.6j protocol |
 | Backend URL | ws:// or wss:// | — | — | RW | RW | — | Yes | | WebSocket endpoint |
 | Charge Box ID | up to 20 chars | — | — | RW | RW | — | Yes | | Unique charger ID |
+| Manual meter info | 0 / 1 | 0 | — | RW | RW | — | Yes | | Report the meter type and serial below instead of the built-in meter name |
+| Meter type | up to 25 chars | — | — | RW | RW | — | Yes | | Model designation reported as OCPP `meterType`. Web UI only — no LCD entry |
+| Meter serial | up to 25 chars | — | — | RW | RW | — | Yes | | Reported as OCPP `meterSerialNumber`; omitted when empty. Web UI only |
+
+The three meter-identity settings are editable in the web UI only: they are free
+text that no LCD button sequence can enter sensibly, and they are set once during
+provider onboarding. See [OCPP meter identity](configuration.md#ocpp-meter-identity).
 
 See [OCPP setup](ocpp.md) for provider-specific guides.
 

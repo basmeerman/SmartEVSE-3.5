@@ -440,6 +440,19 @@
             <span class="form-label">Default idTag</span>
             <input id="ocpp_auto_auth_idtag" class="form-input" placeholder="Default idTag">
           </div>
+          <div class="form-row">
+            <span class="form-label">Meter info</span>
+            <input type="checkbox" id="ocpp_meter_manual" onclick="toggleOcppMeterManual()">
+            <label for="ocpp_meter_manual" id="ocpp_meter_manual_label" style="font-size:.85rem" title="Report the meter model and serial you enter below instead of the built-in meter name. Needed for MID verification at OCPP provider onboarding.">Manual</label>
+          </div>
+          <div class="form-row">
+            <span class="form-label">Meter type</span>
+            <input id="ocpp_meter_type" class="form-input" maxlength="25" placeholder="Eastron SDM72D-M-MID" title="Model designation exactly as printed on the meter type plate, matching its MID conformity declaration (max 25 characters)">
+          </div>
+          <div class="form-row">
+            <span class="form-label">Meter serial</span>
+            <input id="ocpp_meter_serial" class="form-input" maxlength="25" placeholder="Serial from type plate" title="Meter serial number, used to tie session data to one certified instrument (max 25 characters)">
+          </div>
           <div class="form-row" style="justify-content:flex-end;border:none">
             <button type="button" class="btn btn-sm" id="ocpp_save_btn" style="background:var(--accent);color:#fff" onclick="configureOcpp()">Save OCPP</button>
           </div>

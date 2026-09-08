@@ -102,6 +102,9 @@ $(BUILD)/test_ocpp_telemetry: $(TEST_DIR)/test_ocpp_telemetry.c $(OCPP_TELEMETRY
 $(BUILD)/test_ocpp_iec61851: $(TEST_DIR)/test_ocpp_iec61851.c $(OCPP_LOGIC_SRC) $(SRC_DIR)/ocpp_logic.h include/*.h | $(BUILD)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(TEST_DIR)/test_ocpp_iec61851.c $(OCPP_LOGIC_SRC)
 
+$(BUILD)/test_ocpp_meter_identity: $(TEST_DIR)/test_ocpp_meter_identity.c $(OCPP_LOGIC_SRC) $(SRC_DIR)/ocpp_logic.h include/*.h | $(BUILD)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(TEST_DIR)/test_ocpp_meter_identity.c $(OCPP_LOGIC_SRC)
+
 $(BUILD)/test_ocpp_resilience: $(TEST_DIR)/test_ocpp_resilience.c $(OCPP_LOGIC_SRC) $(SRC_DIR)/ocpp_logic.h include/*.h | $(BUILD)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(TEST_DIR)/test_ocpp_resilience.c $(OCPP_LOGIC_SRC)
 
