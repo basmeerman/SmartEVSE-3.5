@@ -45,6 +45,7 @@
 #include "http_api.h"
 #include "capacity_peak.h"
 #include "fw_version.h"
+#include "nvs_shadow.h"
 
 //OCPP includes
 #include <MicroOcpp.h>
@@ -70,44 +71,14 @@ volatile uint32_t cpPulseCount = 0;  // Count CP rising edge interrupts
 #endif
 
 // delayed write settings - reduces flash wear by combining multiple writes into one
-static bool SettingsDirty = false;                      // Flag indicating settings need to be written
-static unsigned long LastSettingsWriteTime = 0;         // millis() timestamp of last write
+// Write scheduling lives in pure C nvs_shadow.c so the policy — first write
+// after boot is immediate, later writes are rate-limited, a forced flush
+// ignores the interval, and millis() wraparound does not stall writes — is
+// unit-tested. Only the write itself is platform code.
+static nvs_shadow_t settingsShadow;
+#define SETTINGS_SLOT 0
 
 // Cache structure for detecting changed values - only write values that actually changed
-struct SettingsCache {
-    uint8_t Config, Lock, Mode, AccessStatus;
-    uint16_t CardOffset;
-    uint32_t DelayedStartTime, DelayedStopTime;
-    uint16_t DelayedRepeat;
-    uint8_t LoadBl;
-    uint16_t MaxMains, MaxSumMains, MaxSumMainsTime, MaxCurrent, MinCurrent, MaxCircuit;
-    uint8_t Switch, RCmon;
-    uint16_t StartCurrent, StopTime, ImportCurrent;
-    uint8_t Grid, SB2_WIFImode, RFIDReader;
-    uint8_t MainsMeterType, MainsMeterAddress, EVMeterType, EVMeterAddress, CircuitMeterType, CircuitMeterAddress;
-    uint16_t MaxCircuitMains;
-    uint8_t EMEndianness, EMIDivisor, EMUDivisor, EMPDivisor, EMEDivisor, EMDataType, EMFunction;
-    uint16_t EMIRegister, EMURegister, EMPRegister, EMERegister;
-    uint8_t WIFImode;
-    uint16_t EnableC2;
-    uint16_t maxTemp;
-    uint8_t PrioStrategy;
-    uint16_t RotationInterval;
-    uint16_t IdleTimeout;
-    uint8_t AutoUpdate, LCDlock, CableLock;
-    uint16_t LCDPin;
-    bool MQTTSmartServer;
-#if MQTT
-    bool MQTTChangeOnly;
-    uint16_t MQTTHeartbeat;
-#endif
-    uint8_t OcppMode;
-    uint8_t LedMode;
-    uint8_t AuthMode;
-    uint16_t CapacityLimit;
-    bool valid;  // True once cache is populated from read_settings()
-};
-static SettingsCache settingsCache = {};
 
 // MQTT change-only publishing cache and settings
 #if MQTT
@@ -117,29 +88,36 @@ uint16_t MQTTHeartbeat = 60;              // Heartbeat interval (seconds) for un
 static uint32_t MQTTMsgCount = 0;         // Count of MQTT messages published since boot
 #endif
 
-// Macros to only write if value changed
-#define PREFS_PUT_UCHAR_IF_CHANGED(key, value, cacheVar) \
-    if (!settingsCache.valid || (value) != settingsCache.cacheVar) { \
+// Write a setting only when NVS does not already hold that value.
+//
+// This replaces the former 50-field settingsCache RAM mirror: NVS keeps its
+// page in RAM anyway, so reading a key back is cheap, while the mirror had to
+// be declared, populated on boot and kept in step by hand — a duplicated name
+// between the value and its cache field silently disabled change detection for
+// that key. Comparing against NVS itself cannot drift.
+#define PREFS_PUT_UCHAR_IF_CHANGED(key, value) \
+    if (!preferences.isKey(key) || preferences.getUChar(key) != (uint8_t)(value)) { \
         preferences.putUChar(key, value); \
-        settingsCache.cacheVar = (value); \
     }
 
-#define PREFS_PUT_USHORT_IF_CHANGED(key, value, cacheVar) \
-    if (!settingsCache.valid || (value) != settingsCache.cacheVar) { \
+#define PREFS_PUT_USHORT_IF_CHANGED(key, value) \
+    if (!preferences.isKey(key) || preferences.getUShort(key) != (uint16_t)(value)) { \
         preferences.putUShort(key, value); \
-        settingsCache.cacheVar = (value); \
     }
 
-#define PREFS_PUT_ULONG_IF_CHANGED(key, value, cacheVar) \
-    if (!settingsCache.valid || (value) != settingsCache.cacheVar) { \
+#define PREFS_PUT_ULONG_IF_CHANGED(key, value) \
+    if (!preferences.isKey(key) || preferences.getULong(key) != (uint32_t)(value)) { \
         preferences.putULong(key, value); \
-        settingsCache.cacheVar = (value); \
     }
 
-#define PREFS_PUT_BOOL_IF_CHANGED(key, value, cacheVar) \
-    if (!settingsCache.valid || (value) != settingsCache.cacheVar) { \
+#define PREFS_PUT_BOOL_IF_CHANGED(key, value) \
+    if (!preferences.isKey(key) || preferences.getBool(key) != (bool)(value)) { \
         preferences.putBool(key, value); \
-        settingsCache.cacheVar = (value); \
+    }
+
+#define PREFS_PUT_INT_IF_CHANGED(key, value) \
+    if (!preferences.isKey(key) || preferences.getInt(key) != (int32_t)(value)) { \
+        preferences.putInt(key, value); \
     }
 
 uint16_t LCDPin = 0;                                                        // PINcode to operate LCD keys from web-interface
@@ -1398,6 +1376,13 @@ void validate_settings(void) {
 }
 
 void read_settings() {
+
+    // Scheduling state starts clean: nothing is pending until something marks
+    // it, and the first mark after boot writes without waiting out the interval.
+    // glcd.cpp also calls read_settings() to abandon unsaved menu edits, where
+    // resetting the pending flag is exactly right — the edits are being
+    // discarded, so they must not be written out afterwards.
+    nvs_shadow_init(&settingsShadow, SETTINGS_WRITE_INTERVAL * 1000UL);
     
     // Open preferences. true = read only,  false = read/write
     // If "settings" does not exist, it will be created, and initialized with the default values
@@ -1481,69 +1466,6 @@ void read_settings() {
 
         preferences.end();                                  
 
-        // Populate settings cache with values just read from NVS
-        settingsCache.Config = Config;
-        settingsCache.Lock = Lock;
-        settingsCache.Mode = Mode;
-        settingsCache.AccessStatus = AccessStatus;
-        settingsCache.CardOffset = CardOffset;
-        settingsCache.DelayedStartTime = DelayedStartTime.epoch2;
-        settingsCache.DelayedStopTime = DelayedStopTime.epoch2;
-        settingsCache.DelayedRepeat = DelayedRepeat;
-        settingsCache.LoadBl = LoadBl;
-        settingsCache.MaxMains = MaxMains;
-        settingsCache.MaxSumMains = MaxSumMains;
-        settingsCache.MaxSumMainsTime = MaxSumMainsTime;
-        settingsCache.MaxCurrent = MaxCurrent;
-        settingsCache.MinCurrent = MinCurrent;
-        settingsCache.MaxCircuit = MaxCircuit;
-        settingsCache.Switch = Switch;
-        settingsCache.RCmon = RCmon;
-        settingsCache.StartCurrent = StartCurrent;
-        settingsCache.StopTime = StopTime;
-        settingsCache.ImportCurrent = ImportCurrent;
-        settingsCache.Grid = Grid;
-        settingsCache.SB2_WIFImode = SB2_WIFImode;
-        settingsCache.RFIDReader = RFIDReader;
-        settingsCache.MainsMeterType = MainsMeter.Type;
-        settingsCache.MainsMeterAddress = MainsMeter.Address;
-        settingsCache.EVMeterType = EVMeter.Type;
-        settingsCache.EVMeterAddress = EVMeter.Address;
-        settingsCache.CircuitMeterType = CircuitMeter.Type;
-        settingsCache.CircuitMeterAddress = CircuitMeter.Address;
-        settingsCache.MaxCircuitMains = MaxCircuitMains;
-        settingsCache.EMEndianness = EMConfig[EM_CUSTOM].Endianness;
-        settingsCache.EMIRegister = EMConfig[EM_CUSTOM].IRegister;
-        settingsCache.EMIDivisor = EMConfig[EM_CUSTOM].IDivisor;
-        settingsCache.EMURegister = EMConfig[EM_CUSTOM].URegister;
-        settingsCache.EMUDivisor = EMConfig[EM_CUSTOM].UDivisor;
-        settingsCache.EMPRegister = EMConfig[EM_CUSTOM].PRegister;
-        settingsCache.EMPDivisor = EMConfig[EM_CUSTOM].PDivisor;
-        settingsCache.EMERegister = EMConfig[EM_CUSTOM].ERegister;
-        settingsCache.EMEDivisor = EMConfig[EM_CUSTOM].EDivisor;
-        settingsCache.EMDataType = EMConfig[EM_CUSTOM].DataType;
-        settingsCache.EMFunction = EMConfig[EM_CUSTOM].Function;
-        settingsCache.WIFImode = WIFImode;
-        settingsCache.EnableC2 = EnableC2;
-        settingsCache.maxTemp = maxTemp;
-        settingsCache.PrioStrategy = PrioStrategy;
-        settingsCache.RotationInterval = RotationInterval;
-        settingsCache.IdleTimeout = IdleTimeout;
-        settingsCache.AutoUpdate = AutoUpdate;
-        settingsCache.LCDlock = LCDlock;
-        settingsCache.CableLock = CableLock;
-        settingsCache.LCDPin = LCDPin;
-        settingsCache.MQTTSmartServer = MQTTSmartServer;
-#if MQTT
-        settingsCache.MQTTChangeOnly = MQTTChangeOnly;
-        settingsCache.MQTTHeartbeat = MQTTHeartbeat;
-#endif
-        settingsCache.OcppMode = OcppMode;
-        settingsCache.LedMode = LedMode;
-        settingsCache.AuthMode = AuthMode;
-        settingsCache.CapacityLimit = CapacityLimit;
-        settingsCache.valid = true;
-        _LOG_D("Settings cache populated from NVS\n");
 
         // Store settings when not initialized
         if (!Initialized) write_settings();
@@ -1560,76 +1482,75 @@ void write_settings(void) {
  if (preferences.begin("settings", false) ) {
 
     // Only write values that have actually changed from cached values
-    PREFS_PUT_UCHAR_IF_CHANGED("Config", Config, Config);
-    PREFS_PUT_UCHAR_IF_CHANGED("Lock", Lock, Lock);
-    PREFS_PUT_UCHAR_IF_CHANGED("Mode", Mode, Mode);
-    PREFS_PUT_UCHAR_IF_CHANGED("Access", AccessStatus, AccessStatus);
-    PREFS_PUT_USHORT_IF_CHANGED("CardOffs16", CardOffset, CardOffset);
-    PREFS_PUT_ULONG_IF_CHANGED("DelayedStartTim", DelayedStartTime.epoch2, DelayedStartTime);
-    PREFS_PUT_ULONG_IF_CHANGED("DelayedStopTime", DelayedStopTime.epoch2, DelayedStopTime);
-    PREFS_PUT_USHORT_IF_CHANGED("DelayedRepeat", DelayedRepeat, DelayedRepeat);
-    PREFS_PUT_UCHAR_IF_CHANGED("LoadBl", LoadBl, LoadBl);
-    PREFS_PUT_USHORT_IF_CHANGED("MaxMains", MaxMains, MaxMains);
-    PREFS_PUT_USHORT_IF_CHANGED("MaxSumMains", MaxSumMains, MaxSumMains);
-    PREFS_PUT_USHORT_IF_CHANGED("MaxSumMainsTime", MaxSumMainsTime, MaxSumMainsTime);
-    PREFS_PUT_USHORT_IF_CHANGED("MaxCurrent", MaxCurrent, MaxCurrent);
-    PREFS_PUT_USHORT_IF_CHANGED("MinCurrent", MinCurrent, MinCurrent);
-    PREFS_PUT_USHORT_IF_CHANGED("MaxCircuit", MaxCircuit, MaxCircuit);
-    PREFS_PUT_UCHAR_IF_CHANGED("Switch", Switch, Switch);
-    PREFS_PUT_UCHAR_IF_CHANGED("RCmon", RCmon, RCmon);
-    PREFS_PUT_USHORT_IF_CHANGED("StartCurrent", StartCurrent, StartCurrent);
-    PREFS_PUT_USHORT_IF_CHANGED("StopTime", StopTime, StopTime);
-    PREFS_PUT_USHORT_IF_CHANGED("ImportCurrent", ImportCurrent, ImportCurrent);
-    PREFS_PUT_UCHAR_IF_CHANGED("Grid", Grid, Grid);
-    PREFS_PUT_UCHAR_IF_CHANGED("SB2WIFImode", SB2_WIFImode, SB2_WIFImode);
-    PREFS_PUT_UCHAR_IF_CHANGED("RFIDReader", RFIDReader, RFIDReader);
+    PREFS_PUT_UCHAR_IF_CHANGED("Config", Config);
+    PREFS_PUT_UCHAR_IF_CHANGED("Lock", Lock);
+    PREFS_PUT_UCHAR_IF_CHANGED("Mode", Mode);
+    PREFS_PUT_UCHAR_IF_CHANGED("Access", AccessStatus);
+    PREFS_PUT_USHORT_IF_CHANGED("CardOffs16", CardOffset);
+    PREFS_PUT_ULONG_IF_CHANGED("DelayedStartTim", DelayedStartTime.epoch2);
+    PREFS_PUT_ULONG_IF_CHANGED("DelayedStopTime", DelayedStopTime.epoch2);
+    PREFS_PUT_USHORT_IF_CHANGED("DelayedRepeat", DelayedRepeat);
+    PREFS_PUT_UCHAR_IF_CHANGED("LoadBl", LoadBl);
+    PREFS_PUT_USHORT_IF_CHANGED("MaxMains", MaxMains);
+    PREFS_PUT_USHORT_IF_CHANGED("MaxSumMains", MaxSumMains);
+    PREFS_PUT_USHORT_IF_CHANGED("MaxSumMainsTime", MaxSumMainsTime);
+    PREFS_PUT_USHORT_IF_CHANGED("MaxCurrent", MaxCurrent);
+    PREFS_PUT_USHORT_IF_CHANGED("MinCurrent", MinCurrent);
+    PREFS_PUT_USHORT_IF_CHANGED("MaxCircuit", MaxCircuit);
+    PREFS_PUT_UCHAR_IF_CHANGED("Switch", Switch);
+    PREFS_PUT_UCHAR_IF_CHANGED("RCmon", RCmon);
+    PREFS_PUT_USHORT_IF_CHANGED("StartCurrent", StartCurrent);
+    PREFS_PUT_USHORT_IF_CHANGED("StopTime", StopTime);
+    PREFS_PUT_USHORT_IF_CHANGED("ImportCurrent", ImportCurrent);
+    PREFS_PUT_UCHAR_IF_CHANGED("Grid", Grid);
+    PREFS_PUT_UCHAR_IF_CHANGED("SB2WIFImode", SB2_WIFImode);
+    PREFS_PUT_UCHAR_IF_CHANGED("RFIDReader", RFIDReader);
 
-    PREFS_PUT_UCHAR_IF_CHANGED("MainsMeter", MainsMeter.Type, MainsMeterType);
-    PREFS_PUT_UCHAR_IF_CHANGED("MainsMAddress", MainsMeter.Address, MainsMeterAddress);
-    PREFS_PUT_UCHAR_IF_CHANGED("EVMeter", EVMeter.Type, EVMeterType);
-    PREFS_PUT_UCHAR_IF_CHANGED("EVMeterAddress", EVMeter.Address, EVMeterAddress);
-    PREFS_PUT_UCHAR_IF_CHANGED("CircuitMeter", CircuitMeter.Type, CircuitMeterType);
-    PREFS_PUT_UCHAR_IF_CHANGED("CirMeterAddr", CircuitMeter.Address, CircuitMeterAddress);
-    PREFS_PUT_USHORT_IF_CHANGED("MaxCirMains", MaxCircuitMains, MaxCircuitMains);
-    PREFS_PUT_UCHAR_IF_CHANGED("EMEndianness", EMConfig[EM_CUSTOM].Endianness, EMEndianness);
-    PREFS_PUT_USHORT_IF_CHANGED("EMIRegister", EMConfig[EM_CUSTOM].IRegister, EMIRegister);
-    PREFS_PUT_UCHAR_IF_CHANGED("EMIDivisor", EMConfig[EM_CUSTOM].IDivisor, EMIDivisor);
-    PREFS_PUT_USHORT_IF_CHANGED("EMURegister", EMConfig[EM_CUSTOM].URegister, EMURegister);
-    PREFS_PUT_UCHAR_IF_CHANGED("EMUDivisor", EMConfig[EM_CUSTOM].UDivisor, EMUDivisor);
-    PREFS_PUT_USHORT_IF_CHANGED("EMPRegister", EMConfig[EM_CUSTOM].PRegister, EMPRegister);
-    PREFS_PUT_UCHAR_IF_CHANGED("EMPDivisor", EMConfig[EM_CUSTOM].PDivisor, EMPDivisor);
-    PREFS_PUT_USHORT_IF_CHANGED("EMERegister", EMConfig[EM_CUSTOM].ERegister, EMERegister);
-    PREFS_PUT_UCHAR_IF_CHANGED("EMEDivisor", EMConfig[EM_CUSTOM].EDivisor, EMEDivisor);
-    PREFS_PUT_UCHAR_IF_CHANGED("EMDataType", EMConfig[EM_CUSTOM].DataType, EMDataType);
-    PREFS_PUT_UCHAR_IF_CHANGED("EMFunction", EMConfig[EM_CUSTOM].Function, EMFunction);
-    PREFS_PUT_UCHAR_IF_CHANGED("WIFImode", WIFImode, WIFImode);
-    PREFS_PUT_USHORT_IF_CHANGED("EnableC2", EnableC2, EnableC2);
-    PREFS_PUT_USHORT_IF_CHANGED("maxTemp", maxTemp, maxTemp);
-    PREFS_PUT_UCHAR_IF_CHANGED("PrioStrategy", PrioStrategy, PrioStrategy);
-    PREFS_PUT_USHORT_IF_CHANGED("RotationIntvl", RotationInterval, RotationInterval);
-    PREFS_PUT_USHORT_IF_CHANGED("IdleTimeout", IdleTimeout, IdleTimeout);
-    PREFS_PUT_UCHAR_IF_CHANGED("AutoUpdate", AutoUpdate, AutoUpdate);
-    PREFS_PUT_UCHAR_IF_CHANGED("LCDlock", LCDlock, LCDlock);
-    PREFS_PUT_UCHAR_IF_CHANGED("CableLock", CableLock, CableLock);
-    PREFS_PUT_USHORT_IF_CHANGED("LCDPin", LCDPin, LCDPin);
-    PREFS_PUT_BOOL_IF_CHANGED("MQTTSmartServer", MQTTSmartServer, MQTTSmartServer);
+    PREFS_PUT_UCHAR_IF_CHANGED("MainsMeter", MainsMeter.Type);
+    PREFS_PUT_UCHAR_IF_CHANGED("MainsMAddress", MainsMeter.Address);
+    PREFS_PUT_UCHAR_IF_CHANGED("EVMeter", EVMeter.Type);
+    PREFS_PUT_UCHAR_IF_CHANGED("EVMeterAddress", EVMeter.Address);
+    PREFS_PUT_UCHAR_IF_CHANGED("CircuitMeter", CircuitMeter.Type);
+    PREFS_PUT_UCHAR_IF_CHANGED("CirMeterAddr", CircuitMeter.Address);
+    PREFS_PUT_USHORT_IF_CHANGED("MaxCirMains", MaxCircuitMains);
+    PREFS_PUT_UCHAR_IF_CHANGED("EMEndianness", EMConfig[EM_CUSTOM].Endianness);
+    PREFS_PUT_USHORT_IF_CHANGED("EMIRegister", EMConfig[EM_CUSTOM].IRegister);
+    PREFS_PUT_UCHAR_IF_CHANGED("EMIDivisor", EMConfig[EM_CUSTOM].IDivisor);
+    PREFS_PUT_USHORT_IF_CHANGED("EMURegister", EMConfig[EM_CUSTOM].URegister);
+    PREFS_PUT_UCHAR_IF_CHANGED("EMUDivisor", EMConfig[EM_CUSTOM].UDivisor);
+    PREFS_PUT_USHORT_IF_CHANGED("EMPRegister", EMConfig[EM_CUSTOM].PRegister);
+    PREFS_PUT_UCHAR_IF_CHANGED("EMPDivisor", EMConfig[EM_CUSTOM].PDivisor);
+    PREFS_PUT_USHORT_IF_CHANGED("EMERegister", EMConfig[EM_CUSTOM].ERegister);
+    PREFS_PUT_UCHAR_IF_CHANGED("EMEDivisor", EMConfig[EM_CUSTOM].EDivisor);
+    PREFS_PUT_UCHAR_IF_CHANGED("EMDataType", EMConfig[EM_CUSTOM].DataType);
+    PREFS_PUT_UCHAR_IF_CHANGED("EMFunction", EMConfig[EM_CUSTOM].Function);
+    PREFS_PUT_UCHAR_IF_CHANGED("WIFImode", WIFImode);
+    PREFS_PUT_USHORT_IF_CHANGED("EnableC2", EnableC2);
+    PREFS_PUT_USHORT_IF_CHANGED("maxTemp", maxTemp);
+    PREFS_PUT_UCHAR_IF_CHANGED("PrioStrategy", PrioStrategy);
+    PREFS_PUT_USHORT_IF_CHANGED("RotationIntvl", RotationInterval);
+    PREFS_PUT_USHORT_IF_CHANGED("IdleTimeout", IdleTimeout);
+    PREFS_PUT_UCHAR_IF_CHANGED("AutoUpdate", AutoUpdate);
+    PREFS_PUT_UCHAR_IF_CHANGED("LCDlock", LCDlock);
+    PREFS_PUT_UCHAR_IF_CHANGED("CableLock", CableLock);
+    PREFS_PUT_USHORT_IF_CHANGED("LCDPin", LCDPin);
+    PREFS_PUT_BOOL_IF_CHANGED("MQTTSmartServer", MQTTSmartServer);
 #if MQTT
-    PREFS_PUT_BOOL_IF_CHANGED("MQTTChgOnly", MQTTChangeOnly, MQTTChangeOnly);
-    PREFS_PUT_USHORT_IF_CHANGED("MQTTHrtbt", MQTTHeartbeat, MQTTHeartbeat);
+    PREFS_PUT_BOOL_IF_CHANGED("MQTTChgOnly", MQTTChangeOnly);
+    PREFS_PUT_USHORT_IF_CHANGED("MQTTHrtbt", MQTTHeartbeat);
 #endif
 
-    PREFS_PUT_UCHAR_IF_CHANGED("OcppMode", OcppMode, OcppMode);
+    PREFS_PUT_UCHAR_IF_CHANGED("OcppMode", OcppMode);
 
-    PREFS_PUT_UCHAR_IF_CHANGED("LedMode", LedMode, LedMode);
-    PREFS_PUT_UCHAR_IF_CHANGED("AuthMode", AuthMode, AuthMode);
+    PREFS_PUT_UCHAR_IF_CHANGED("LedMode", LedMode);
+    PREFS_PUT_UCHAR_IF_CHANGED("AuthMode", AuthMode);
 
-    PREFS_PUT_USHORT_IF_CHANGED("CapacityLim", CapacityLimit, CapacityLimit);
-    // Persist monthly peak across reboots
-    preferences.putInt("CapPeak", CapacityState.monthly.monthly_peak_w);
-    preferences.putUChar("CapMonth", CapacityState.monthly.peak_month);
-
-    // Mark cache as valid after first write
-    settingsCache.valid = true;
+    PREFS_PUT_USHORT_IF_CHANGED("CapacityLim", CapacityLimit);
+    // Persist monthly peak across reboots. Routed through the change check like
+    // every other key: these were previously written on every flush, costing a
+    // flash write per minute even when the peak had not moved.
+    PREFS_PUT_INT_IF_CHANGED("CapPeak", CapacityState.monthly.monthly_peak_w);
+    PREFS_PUT_UCHAR_IF_CHANGED("CapMonth", CapacityState.monthly.peak_month);
 
     preferences.end();
 
@@ -1647,9 +1568,10 @@ void write_settings(void) {
 
     ConfigChanged = 1;                                                          // FIXME this variable never reset to 0?
 
-    // Update timestamp after successful write
-    LastSettingsWriteTime = millis();
-    SettingsDirty = false;
+    // Record the completed write: clears the pending flag and restarts the
+    // interval. Only reached when preferences.begin() succeeded, so a failed
+    // write leaves the slot dirty and is retried on the next pass.
+    nvs_shadow_written(&settingsShadow, SETTINGS_SLOT, millis());
 }
 
 
@@ -1658,8 +1580,20 @@ void write_settings(void) {
  * The actual write happens in the main loop when 60 secs have passed since last write
 */ 
 void request_write_settings(void) {
-    SettingsDirty = true;
+    nvs_shadow_mark(&settingsShadow, SETTINGS_SLOT);
     _LOG_D("Settings write requested\n");
+}
+
+
+/* Write pending settings immediately, ignoring the rate limit.
+ *
+ * For the moments where the next 60 seconds may not happen: leaving the LCD
+ * menu, or rebooting. Does nothing when there is nothing pending.
+ */
+void write_settings_now(void) {
+    if (nvs_shadow_is_dirty(&settingsShadow, SETTINGS_SLOT)) {
+        write_settings();
+    }
 }
 
 
@@ -2510,19 +2444,16 @@ void loop() {
 
         // check if settings need to be written
         // and only write when enough time has passed
-        if (SettingsDirty) {
-            if ((lastCheck - LastSettingsWriteTime) >= (SETTINGS_WRITE_INTERVAL * 1000UL) || 
-                (LastSettingsWriteTime == 0)) {  // First write after boot
-                _LOG_A("Writing settings to flash\n");
-                write_settings();
-            }
+        if (nvs_shadow_due(&settingsShadow, SETTINGS_SLOT, lastCheck, false)) {
+            _LOG_A("Writing settings to flash\n");
+            write_settings();
         }
 
          // a reboot is requested, but we kindly wait until EV is not charging
         static uint8_t RebootDelay = 5;      
         if (shouldReboot && State != STATE_C) {                                 //slaves in STATE_C continue charging when Master reboots
             if (RebootDelay-- == 0) {                                           //give user some time to read any message on the webserver
-                if (SettingsDirty) write_settings();                            //write any pending settings before reboot
+                write_settings_now();                                           //write any pending settings before reboot
                 ESP.restart();                                                  //use non-blocking code so network_loop() keeps working.
             }
         }
