@@ -37,6 +37,7 @@ DIAG_TELEMETRY_SRC  := $(SRC_DIR)/diag_telemetry.c
 DIAG_MODBUS_SRC     := $(SRC_DIR)/diag_modbus.c
 CAPACITY_PEAK_SRC   := $(SRC_DIR)/capacity_peak.c
 FW_VERSION_SRC      := $(SRC_DIR)/fw_version.c
+NVS_SHADOW_SRC      := $(SRC_DIR)/nvs_shadow.c
 
 # Discover all test files
 TEST_SRCS := $(wildcard $(TEST_DIR)/test_*.c)
@@ -134,6 +135,9 @@ $(BUILD)/test_capacity_peak: $(TEST_DIR)/test_capacity_peak.c $(CAPACITY_PEAK_SR
 
 $(BUILD)/test_fw_version: $(TEST_DIR)/test_fw_version.c $(FW_VERSION_SRC) $(SRC_DIR)/fw_version.h include/*.h | $(BUILD)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(TEST_DIR)/test_fw_version.c $(FW_VERSION_SRC)
+
+$(BUILD)/test_nvs_shadow: $(TEST_DIR)/test_nvs_shadow.c $(NVS_SHADOW_SRC) $(SRC_DIR)/nvs_shadow.h include/*.h | $(BUILD)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(TEST_DIR)/test_nvs_shadow.c $(NVS_SHADOW_SRC)
 
 $(BUILD)/test_api_staleness: $(TEST_DIR)/test_api_staleness.c $(EVSE_SRC) $(MQTT_PARSER_SRC) $(SRC_DIR)/evse_ctx.h $(SRC_DIR)/mqtt_parser.h include/*.h | $(BUILD)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(TEST_DIR)/test_api_staleness.c $(EVSE_SRC) $(MQTT_PARSER_SRC)

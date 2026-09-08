@@ -1360,7 +1360,9 @@ void GLCDMenu(uint8_t Buttons) {
                 setChargeDelay(0);                                              // Clear ChargeDelay
                 setSolarStopTimer(0);                                           // Disable Solar Timer
                 GLCD();
-                write_settings();                                               // Write immediately to nvs when exiting menu
+                write_settings_now();                                           // Write immediately to nvs when exiting menu,
+                                                                                // ignoring the 60s rate limit: the user may cut
+                                                                                // power right after leaving the menu
                 ButtonRelease = 2;                                              // Skip updating of the LCD 
                 PairingPin = "";                                                // Reset PairingPin
             }
