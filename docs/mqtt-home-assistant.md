@@ -136,6 +136,7 @@ All topics use prefix `SmartEVSE/<serial>/`.
 | `/CapacityWindowAvg` | int | W | measurement | Current 15-min window running average power |
 | `/CapacityMonthlyPeak` | int | W | measurement | Highest 15-min average this month |
 | `/CapacityHeadroom` | int | W | measurement | Remaining watts before hitting CapacityLimit |
+| `/StateID` | string | — | — | Raw state name (`A`, `B`, `C`, `B1`, `C1`, …) — the topic evcc.io reads. `/State` carries the human-readable text instead. |
 
 ### Command topics (Set)
 
