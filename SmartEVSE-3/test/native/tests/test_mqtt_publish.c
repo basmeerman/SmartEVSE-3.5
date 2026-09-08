@@ -177,7 +177,6 @@ void test_slot_count_within_bounds(void) {
  * @then The first and third publish, the repeat is suppressed
  */
 void test_state_id_publishes_on_change_only(void) {
-    mqtt_cache_t cache;
     mqtt_cache_init(&cache, 60);
     TEST_ASSERT_TRUE(mqtt_should_publish_str(&cache, MQTT_SLOT_STATE_ID, "B", 100));
     TEST_ASSERT_FALSE(mqtt_should_publish_str(&cache, MQTT_SLOT_STATE_ID, "B", 101));
@@ -193,7 +192,6 @@ void test_state_id_publishes_on_change_only(void) {
  * @then Both publish — one slot's cached value never suppresses the other
  */
 void test_state_id_slot_is_independent_of_state(void) {
-    mqtt_cache_t cache;
     mqtt_cache_init(&cache, 60);
     TEST_ASSERT_TRUE(mqtt_should_publish_str(&cache, MQTT_SLOT_STATE, "Charging", 100));
     TEST_ASSERT_TRUE(mqtt_should_publish_str(&cache, MQTT_SLOT_STATE_ID, "Charging", 100));
