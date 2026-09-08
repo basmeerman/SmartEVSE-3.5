@@ -24,9 +24,10 @@ Two structural facts dominate this window and should be settled before any bulk 
 
 1. **Upstream deleted the v4 / CH32 target and the `ENABLE_OCPP` build switch.** The fork
    built and budgeted both (`pio run -e ch32`, CI enforced the CH32 flash/RAM budget).
-   **Decision 1 (2026-09-08): the fork follows upstream and drops them**, so this stops
-   being a divergence and becomes a scheduled removal — see group A and the decisions
-   section at the end.
+   **Decisions 1 and 1b (2026-09-08): the fork follows upstream on both**, so this stops
+   being a divergence and becomes a scheduled removal — the `ENABLE_OCPP` flag first, then
+   v4/CH32. OCPP functionality is unaffected: it is always compiled in and gated at runtime
+   by `OcppMode`. See group A and the decisions section at the end.
 2. **Upstream and the fork implemented capacity-tariff peak tracking and CircuitMeter
    independently.** The fork shipped them as Plan 13 / Plan 14 (`capacity_peak.c`,
    pure-C, tested); upstream shipped `CapacityMode` + `interval.html` + `capacity.html`
@@ -46,7 +47,7 @@ changing.
 | Hash | Date | Title | Classification | Priority | Notes |
 |------|------|-------|----------------|----------|-------|
 | `df910fb` | 2026-06-27 | remove all v4 / CH32 stuff | **Adopt (adapt)** | P2 | Fork drops the v4 / CH32 target to match upstream. Our removal is larger than upstream's diff: `ch32.cpp/h`, `wchisp.cpp/h`, the `v4` and `ch32` PlatformIO envs (`platformio.ini:80`, `:95`), ~254 `SMARTEVSE_VERSION` guards across `src/`, the CH32 flash/RAM budget gate in CI, plus the CLAUDE.md budget table and pre-push verification step 5. Do it as its own PR, before the `esp32.cpp`-heavy work in group E. |
-| `f72ade5` | 2026-06-27 | remove ENABLE_OCPP ifdefs | **Adopt (adapt)** | P2 | OCPP becomes unconditional. Verify the release image still fits the ESP32 flash budget without the non-OCPP configuration as an escape hatch — that budget headroom was the original reason for the switch. |
+| `f72ade5` | 2026-06-27 | remove ENABLE_OCPP ifdefs | **Integrated** | P2 | Fork PR (2026-09-08). The flag only ever controlled *compile-time inclusion* of the MicroOcpp library; whether OCPP runs is the separate NVS-persisted `OcppMode` setting (`main.cpp:295`, default 0), reachable from the web UI, MQTT `/OCPP` and the bridge. Dropping the flag therefore removes a build configuration, not a feature. The platform half of each guard is kept — every `#if ENABLE_OCPP && defined(SMARTEVSE_VERSION)` became `#if defined(SMARTEVSE_VERSION)` — so OCPP still stays out of the CH32 build. `esp32.h:165` RFID menu range becomes a constant 6. |
 | `9510b30` | 2026-06-29 | main.cpp: remove unused v4 Read functions | **Adopt** | P2 | Falls out of `df910fb`; take it in the same PR. |
 | `9651e62` | 2026-06-08 | fix v4 bug | **Skip** | — | Fixes an upstream `SMARTCircuitSE_VERSION` typo in code the fork never had (`grep SMARTCircuitSE` returns nothing), on a target the fork is now removing. |
 
@@ -258,7 +259,8 @@ All four questions raised by this triage were answered by the maintainer on 2026
 
 | # | Question | Decision | Consequence |
 |---|----------|----------|-------------|
-| 1 | v4 / CH32 target | **Drop it, follow upstream** | Own PR: delete `ch32.cpp/h`, `wchisp.cpp/h`, the `v4` and `ch32` envs, ~254 `SMARTEVSE_VERSION` guards, the CH32 CI budget gate, the CLAUDE.md budget row and pre-push verification step 5. `f72ade5` (drop `ENABLE_OCPP`) rides along, subject to the ESP32 flash budget still holding with OCPP always compiled in. |
+| 1 | v4 / CH32 target | **Drop it, follow upstream** | Own PR: delete `ch32.cpp/h`, `wchisp.cpp/h`, the `v4` and `ch32` envs, ~254 `SMARTEVSE_VERSION` guards, the CH32 CI budget gate, the CLAUDE.md budget row and pre-push verification step 5. |
+| 1b | `ENABLE_OCPP` build flag | **Drop it, keep the functionality** | `f72ade5` adopted: OCPP is always compiled in, and enabling it stays the runtime `OcppMode` setting. Done in its own PR ahead of the v4/CH32 removal, since the guards are `#if ENABLE_OCPP && defined(SMARTEVSE_VERSION)` and only the first half comes out. |
 | 2 | Upstream `shadowPrefs` NVS rework | **Adopt** | Port `bd2475a` → `7e194ee` adapted, after the P1 bundle and after the group A removal. Needs on-device verification; the native harness cannot reach Arduino `Preferences`. Supersedes the fork's `settingsCache` / `request_write_settings` pattern and the project-memory note describing it. |
 | 3 | Capacity tariff naming | **Keep fork names, document the difference** | No aliases, no renames. `4198813` and `b2e8ad4` become *Rejected*. `upstream-differences.md` records the topic-name divergence and that HA configs are not portable between the two firmwares. |
 | 4 | Meter type IDs / Chint DDSU666 | **Add at slot 20, keep Orno at 17/18** | New `EM_CHINT_1P` = 20 with the DDSU666 register profile, a Plan 12 compatibility profile, and an `upstream-differences.md` entry for the 17/18 vs upstream-17 collision. |
@@ -275,7 +277,7 @@ to be adapted around.
 1. P1 correctness bundle — `36621b6`, `1c80751`, `b97d97c` (the `clearErrorFlags(0xFF)`
    half only, until `shadowPrefs` lands).
 2. P1 security — `e36a3cb` portal-mode URI restriction via the Plan 16 auth gate.
-3. Group A removal — drop v4 / CH32 and the `ENABLE_OCPP` switch (decision 1).
+3. Group A removal — `ENABLE_OCPP` flag first (decision 1b, done), then v4 / CH32 (decision 1).
 4. Group E — `shadowPrefs` NVS rework (decision 2), plus `e72abb6` and `459e182`.
 5. Interop — `2ae8b2e` + `1ea2301` MQTT `StateID` through the Plan 08 change-only slots.
 6. Meters — Chint DDSU666 at slot 20 (decision 4) + Plan 12 profile.
