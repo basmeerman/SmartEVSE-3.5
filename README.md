@@ -21,7 +21,7 @@ your house wiring and an electric vehicle. It supports:
 - Direct drive of a mains contactor.
 - Up to 8 modules sharing one mains supply (load balancing).
 - RFID authorization (100 cards).
-- 18 supported Modbus kWh meters + Sensorbox + HomeWizard P1 + REST API.
+- 19 supported Modbus kWh meters + Sensorbox + HomeWizard P1 + REST API.
 - MQTT + Home Assistant auto-discovery.
 - REST API for scripts and dashboards.
 - OCPP 1.6j for public / billed charging.
@@ -86,7 +86,7 @@ audience guides):
 This repository is maintained independently. It diverges from the
 reference codebase primarily in two areas: (1) a restructured
 architecture that enables native host testing of the core logic
-(1,200+ automated tests across 50 suites — state machine, parsers,
+(1,400+ automated tests across 57 suites — state machine, parsers,
 validators, OCPP, Modbus), and (2) security hardening of the Web UI and
 firmware update paths (signed firmware, per-endpoint auth gate, PIN
 rate limiter, CSRF/Origin check, secret redaction).
@@ -111,6 +111,15 @@ See [configuration.md, WiFi section](docs/configuration.md#wifi).
 Connect to WiFi, then browse to
 `http://smartevse-<serial>.local/update` (serial shown on the LCD).
 Select `firmware.signed.bin` from the releases page and upload.
+
+Releases from this repository are versioned `bm-YYYY.MM.N` (for example
+`bm-2026.09.1`) and the running build reports `distribution: basmeerman`
+in `GET /settings` and on the MQTT `/Distribution` topic. The reference
+codebase uses `vX.Y.Z`, so the version string alone tells you which
+project built a given device — the two are deliberately not comparable.
+Automatic updates only ever install releases of the same distribution;
+switching between projects stays a manual action from the update page.
+See [version numbering](docs/building_flashing.md#version-numbering).
 
 For the full install flow from boxed PCB to commissioned charger, see
 the [installer guide](docs/guide-installer.md).

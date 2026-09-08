@@ -19,6 +19,18 @@ will give output like:
 
 This output is often used to add to your bug report, so the developers can see your configuration.
 
+Two identity fields are worth calling out, because they say which firmware a
+device is actually running:
+
+| Field | Description |
+|-------|-------------|
+| `version` | Firmware version. Releases from this repository are `bm-YYYY.MM.N` (e.g. `bm-2026.09.1`); a locally compiled build reports a timestamp instead. See [version numbering](building_flashing.md#version-numbering). |
+| `distribution` | Which build this is — `basmeerman` for this repository. |
+
+The `ocpp` object additionally reports `meter_manual`, `meter_type` and
+`meter_serial` — the meter identity sent in the OCPP BootNotification. See
+[OCPP meter identity](configuration.md#ocpp-meter-identity).
+
 NOTE:
 In the http world, GET parameters are passed like this:
 curl -X GET http://ipaddress/endpoint?param1=value1&param2=value2
@@ -43,6 +55,18 @@ to your curl POST command. -d ''
 
 ```
     curl -X POST http://ipaddress/settings?backlight=1 -d ''
+```
+
+* ocpp_meter_manual, ocpp_meter_type, ocpp_meter_serial
+
+&emsp;&emsp;Meter identity reported in the OCPP BootNotification, sent with `ocpp_update=1`.
+`ocpp_meter_manual` is 0 or 1; the other two are free text, max 25 characters
+(the OCPP 1.6 `CiString25` limit) and printable ASCII only. With
+`ocpp_meter_manual=0` the built-in meter name is reported and no serial is sent.
+See [OCPP meter identity](configuration.md#ocpp-meter-identity).
+
+```
+    curl -X POST 'http://ipaddress/settings?ocpp_update=1&ocpp_meter_manual=1&ocpp_meter_type=Eastron%20SDM72D-M-MID&ocpp_meter_serial=21051234' -d ''
 ```
 
 * mode

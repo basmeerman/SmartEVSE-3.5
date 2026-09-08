@@ -156,11 +156,11 @@ CI generates two reports on every build:
 
 | Metric | Value |
 |--------|-------|
-| Native C test suites | 50 |
-| Native C test scenarios | 1,096 |
+| Native C test suites | 57 |
+| Native C test scenarios | 1,247 |
 | OCPP protocol tests | 50 |
-| Modbus protocol tests | 146 |
-| **Total automated tests** | **1,200+** |
+| Modbus protocol tests | 149 |
+| **Total automated tests** | **1,400+** |
 | Features covered | 60+ |
 | Requirement traceability | 100% |
 
@@ -170,11 +170,12 @@ CI generates two reports on every build:
 
 ### 3.1 Pipeline Overview
 
-Every push and pull request triggers a 10-job CI pipeline:
+Every push and pull request triggers an 11-job CI pipeline (plus a `ci-passed`
+aggregate gate, and CodeQL in a separate workflow):
 
 | Job | Gate | What it catches |
 |-----|------|----------------|
-| **native-tests** | 1,096 tests must pass | Logic errors, regressions, state machine bugs |
+| **native-tests** | 1,247 tests must pass | Logic errors, regressions, state machine bugs |
 | **static-analysis** | cppcheck + GCC stack analysis | Uninitialized variables, style issues, stack overflow risk |
 | **memory-sanitizers** | ASan + UBSan zero violations | Buffer overflows, use-after-free, undefined behavior |
 | **valgrind** | Zero leaks | Memory leaks, invalid reads/writes |
@@ -182,7 +183,8 @@ Every push and pull request triggers a 10-job CI pipeline:
 | **traceability** | Report generation + auto-commit | SbE annotation completeness, requirement coverage |
 | **bdd-tests** | Python pytest feature tests | Higher-level behavioral validation |
 | **ocpp-compatibility** | 50 OCPP 1.6J protocol tests | Message format, sequencing, provider compatibility |
-| **modbus-compatibility** | 146 meter register tests | Register maps, endianness, data types, scaling |
+| **modbus-compatibility** | 149 meter register tests | Register maps, endianness, data types, scaling |
+| **mutation-testing** | `scripts/mutate.py` quality probe | Tests that pass regardless of the code they cover |
 | **version-check** | Tag matches platformio.ini (releases only) | Version consistency |
 
 ### 3.2 Quality Gate Flow
@@ -193,7 +195,7 @@ Developer writes code
         ▼
 ┌─────────────────┐    FAIL → Fix code, new commit
 │  Native Tests    │──────────────────────────────┐
-│ (1,096 scenarios)│                              │
+│ (1,247 scenarios)│                              │
 └────────┬────────┘                              │
          │ PASS                                   │
          ▼                                        │
@@ -228,7 +230,7 @@ Developer writes code
          ▼                                        │
 ┌─────────────────┐    FAIL → Fix meter decode    │
 │ Modbus Compat    │──────────────────────────────┤
-│ (146 tests)      │                              │
+│ (149 tests)      │                              │
 └────────┬────────┘                              │
          │ PASS                                   │
          ▼                                        │
@@ -390,8 +392,8 @@ The test suite validates protocols at two levels:
 **Protocol level** (Python interoperability tests, realistic communication):
 - **OCPP**: 50 tests using a mock CSMS — verifies message format, sequencing,
   error handling, and provider-specific flows (Tap Electric, Tibber, SteVe)
-- **Modbus**: 146 tests using ctypes bridge to C decode functions — verifies
-  register maps, endianness, data types, and scaling for all 16 meter types
+- **Modbus**: 149 tests using ctypes bridge to C decode functions — verifies
+  register maps, endianness, data types, and scaling for all 17 meter profiles
 
 ### 6.2 OCPP Compatibility Testing (Plan 11) ✓
 
@@ -434,7 +436,7 @@ full design details.
 **Status:** Complete — PR #97 merged 2026-03-23
 
 **Goal:** Verify that SmartEVSE correctly reads current, power, and energy from
-all 16 supported energy meter types by testing against realistic Modbus register
+all 17 profiled energy meter types by testing against realistic Modbus register
 data.
 
 **Architecture:**
@@ -451,11 +453,11 @@ data.
 ABB B23, Phoenix Contact, Carlo Gavazzi, Schneider, SolarEdge, Wago, Sinotimer,
 Chint, Orno 1P, Orno 3P, Sensorbox v2, Custom.
 
-**Coverage:** 146 test scenarios across 9 test files:
+**Coverage:** 149 test scenarios across 9 test files:
 
 | Area | Tests | Key scenarios |
 |------|-------|---------------|
-| Register maps | ~30 | All 16 meter types: correct register addresses, function codes |
+| Register maps | ~30 | All 17 meter profiles: correct register addresses, function codes |
 | Data types | ~15 | FLOAT32, INT32, INT16 interpretation |
 | Endianness | ~15 | HBF_HWF, HBF_LWF, LBF_LWF byte ordering |
 | Phase mapping | ~15 | Per-phase current/voltage/power extraction |
@@ -474,8 +476,8 @@ The interoperability tests complement, not replace, the unit tests:
 
 | Layer | What it validates | Tools | Status |
 |-------|------------------|-------|--------|
-| **Unit tests** | Internal logic correctness | Native C test suite (1,096 tests) | Active |
-| **Protocol tests** | Message format, sequencing, error handling | mobilityhouse/ocpp (50 tests), ctypes bridge (146 tests) | Active |
+| **Unit tests** | Internal logic correctness | Native C test suite (1,247 tests) | Active |
+| **Protocol tests** | Message format, sequencing, error handling | mobilityhouse/ocpp (50 tests), ctypes bridge (149 tests) | Active |
 | **Integration tests** (future) | Full stack end-to-end | EVerest car_simulator (if needed) | Planned |
 | **Certification** (manual) | Formal standards compliance | OCA OCTT (commercial, cloud) | Manual |
 

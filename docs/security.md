@@ -42,6 +42,7 @@ Out of the box, on a fresh install:
 | OCPP auth key | Not returned in GET /settings | Yes — redacted |
 | MQTT password | Not returned in GET /settings | Yes — redacted |
 | Origin / CSRF check | Active when AuthMode=1 | Yes |
+| WiFi setup portal | Serves only `/`, `/save`, `/erasesettings` | Yes — everything else refused while the AP is open |
 
 If you're on a shared LAN (apartment Wi-Fi, office, rented space),
 enable AuthMode=1. On your own home LAN where you trust every
@@ -279,7 +280,38 @@ never appears.
 
 ---
 
-## 12. Reporting security issues
+## 12. Known limitations (reviewed and accepted)
+
+These are deliberate trade-offs, re-confirmed by the September 2026 review.
+They are recorded here so operators can judge them, and so future reviews
+recognise them as decisions rather than oversights.
+
+**WebSocket endpoints are not behind AuthMode.** `/ws/lcd`, `/ws/data` and
+`/diag/stream` upgrade before the auth gate runs, so with AuthMode=1 they
+remain reachable while the equivalent `GET /lcd` is gated. `/ws/lcd` mirrors
+the physical display once per second, which includes the LCD PIN while that
+menu is open. On a trusted LAN this is immaterial; on a shared LAN, treat
+AuthMode=1 as protecting the REST API rather than the whole device.
+
+**The CSRF check is skipped when no `Origin` header is present**, so that
+non-browser integrations keep working. `/erasesettings`, `/autoupdate` and
+`/reboot` match on URI without a method check, so they also answer `GET` —
+and browsers send no `Origin` on a cross-origin GET. A page a LAN user visits
+can therefore reach those three endpoints. `/erasesettings` is the one with
+teeth: it clears settings, WiFi credentials and the RFID whitelist.
+
+**The authenticated session is a device-global flag**, not a per-client token.
+Once anyone authenticates, every client on the LAN is treated as authenticated
+until the 30-minute idle timeout expires — and any allowed request refreshes
+that timer. Per-client sessions are deferred work, not a shipped feature.
+
+All three are confined to `AuthMode=1`, which is opt-in; at the default
+`AuthMode=0` the entire HTTP surface is open by design and none of them
+represents a boundary being crossed.
+
+---
+
+## 13. Reporting security issues
 
 Please use GitHub's private vulnerability reporting on the repository
 rather than a public issue. Private report → maintainer gets notified →

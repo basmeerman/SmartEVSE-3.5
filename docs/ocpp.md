@@ -72,6 +72,15 @@ With a monthly list of transactions and a read-out of my (Inepro PRO380-Mod) kWh
 | Password | WebSocket Basic Auth key | Max 40 characters (optional) |
 | Auto Authorize | Enable FreeVend (auto-start transactions) | On/Off |
 | Auto Authorize ID Tag | ID tag used for auto-authorized transactions | String |
+| Manual meter info | Report the meter type and serial below instead of the built-in meter name | On/Off, default Off |
+| Meter type | Model designation reported as OCPP `meterType` | Max 25 characters, printable ASCII |
+| Meter serial | Reported as OCPP `meterSerialNumber`; omitted when empty | Max 25 characters, printable ASCII |
+
+The three meter-identity settings are web UI only — see
+[OCPP meter identity](configuration.md#ocpp-meter-identity) for why the default
+`meterType` cannot satisfy a MID verification, and note that BootNotification is
+sent once per OCPP session, so the connection must be restarted for changed
+values to reach the backend.
 
 ### OCPP and Load Balancing
 
