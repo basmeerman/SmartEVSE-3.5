@@ -15,3 +15,16 @@ sdkconfig.*
 
 # Native test build artifacts
 SmartEVSE-3/test/native/build/
+
+# Mutation testing artifacts (scripts/mutate.py --build-dir, --report)
+SmartEVSE-3/test/native/build-mut*/
+SmartEVSE-3/test/native/build-mutate*/
+SmartEVSE-3/test/native/reports/
+
+# Python bytecode from the OCPP and Modbus compatibility suites
+__pycache__/
+*.pyc
+
+# Local preview / working artifacts, not part of the published docs
+docs/ui-preview.html
+pictures/SmartEVSEv3-WebUI.pdf
