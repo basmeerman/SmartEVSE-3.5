@@ -84,10 +84,11 @@ typedef struct {
     /* RFID-read grey flash: (millis() - OcppLastRfidUpdate) < 200 */
     bool     rfid_read_flash;
 
-    /* Tx-notification flashes — caller pre-computes (age + enum check). */
-    bool     tx_authorized_flash;  /* < 1000ms && Authorized */
-    bool     tx_rejected_flash;    /* < 2000ms && {Rejected, DeAuthorized, ReservationConflict} */
-    bool     tx_timeout_flash;     /* <  300ms && {AuthorizationTimeout, ConnectionTimeout} */
+    /* Tx-notification flashes. The caller pre-computes each one from the age of
+     * the notification and its status. */
+    bool     tx_authorized_flash;  /* younger than 1000 ms, status Authorized */
+    bool     tx_rejected_flash;    /* younger than 2000 ms, status Rejected, DeAuthorized or ReservationConflict */
+    bool     tx_timeout_flash;     /* younger than 300 ms, status AuthorizationTimeout or ConnectionTimeout */
 
     /* ChargePointStatus (from getChargePointStatus()) */
     led_cp_status_t cp_status;
