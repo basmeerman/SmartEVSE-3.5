@@ -216,6 +216,7 @@ extern struct DelayedTimeStruct DelayedStartTime;
 void read_settings();
 void write_settings(void);
 void request_write_settings(void);
+void write_settings_now(void);          // flush pending settings, ignoring the rate limit
 void setSolarStopTimer(uint16_t Timer);
 void setState(uint8_t NewState);
 void setAccess(AccessStatus_t Access);

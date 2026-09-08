@@ -100,6 +100,16 @@ Background — community reports:
 | Per-phase power/energy via MQTT | No per-phase visibility | [Features: MQTT & HA](features.md#mqtt--home-assistant) |
 | Metering diagnostic counters | No insight into meter communication health | [Features: MQTT & HA](features.md#mqtt--home-assistant) |
 
+### Settings Persistence
+
+| Improvement | Why | Details |
+|-------------|-----|---------|
+| NVS change detection reads NVS, not a RAM mirror | Adopts the substance of upstream `bd2475a` ("get rid of settingsCache because most of NVS's page is already in RAM"). The former 50-field `settingsCache` struct had to be declared, populated on boot and kept in step by hand, and a duplicated name between a value and its cache field silently disabled change detection for that key. | `esp32.cpp` |
+| Write scheduling extracted to pure C | Upstream keeps the policy inline in a templated `ShadowPreferences` class over `std::map<String, Entry>`. The fork puts the timing decision in `nvs_shadow.c` so it is unit-testable, and uses a fixed table instead of heap-allocated map entries. | `nvs_shadow.c`, 10 tests |
+| All NVS writes stay in the main loop | Upstream's `reg()` opens its own `Preferences` handle and may write from the web-server task while `loop()` writes from the main task. The fork keeps marking (a flag) separate from writing (main loop only), so no concurrent NVS handles exist. | `esp32.cpp` |
+| Forced flush on LCD menu exit and reboot | Completes the second half of upstream `b97d97c`; a change made in the menu is no longer lost if power is cut before the 60s window closes | `write_settings_now()` |
+| Monthly capacity peak written only on change | `CapPeak` / `CapMonth` were written on every flush, costing a flash write per minute even when the peak had not moved | `esp32.cpp` |
+
 ### Versioning & Updates
 
 | Improvement | Why | Details |
