@@ -35,7 +35,7 @@
 #include "font.cpp"
 #include "font2.cpp"
 
-#if ENABLE_OCPP && defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
+#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
 #include <MicroOcpp.h>
 #endif
 
@@ -621,7 +621,7 @@ void GLCD(void) {
         glcd_clrln(6, 0x10);                                                    // horizontal line
         glcd_clrln(7, 0x00);
 
-#if ENABLE_OCPP && defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
+#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
         if (OcppMode &&                                          // OCPP enabled
                 (getItemValue(MENU_RFIDREADER) == 6 || getItemValue(MENU_RFIDREADER) == 0) && // RFID in OCPP mode or disabled
                 ocppHasTxNotification()) {                                      // There is an OCPP event to display
@@ -666,7 +666,7 @@ void GLCD(void) {
                     break;
             }
         } else
-#endif //ENABLE_OCPP
+#endif //SMARTEVSE_VERSION
         if (ErrorFlags & LESS_6A && AccessStatus == ON) {
             GLCD_print_buf2(2, (const char *) "WAITING");
             GLCD_print_buf2(4, (const char *) "FOR POWER");
@@ -705,7 +705,7 @@ void GLCD(void) {
             } else if (AccessStatus == PAUSE) {
                 GLCD_print_buf2(2, (const char *) "PAUSE");
             } else {
-#if ENABLE_OCPP && defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
+#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
                 if (OcppMode &&                                  // OCPP enabled
                         (getItemValue(MENU_RFIDREADER) == 6 || getItemValue(MENU_RFIDREADER) == 0)) { // RFID in OCPP mode or disabled
                     switch (getChargePointStatus()) {
@@ -754,7 +754,7 @@ void GLCD(void) {
                             break;
                     }
                 } else
-#endif //ENABLE_OCPP
+#endif //SMARTEVSE_VERSION
                 if (getItemValue(MENU_RFIDREADER)) {
                     if (RFIDstatus == 7) {
                         GLCD_print_buf2(2, (const char *) "INVALID");

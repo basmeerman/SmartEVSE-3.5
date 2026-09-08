@@ -54,13 +54,13 @@
 #include "diag_storage.h"
 
 //OCPP includes
-#if ENABLE_OCPP && defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
+#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
 #include <MicroOcpp.h>
 #include <MicroOcppMongooseClient.h>
 #include <MicroOcpp/Core/Configuration.h>
 #include <MicroOcpp/Core/Context.h>
 #include "ocpp_telemetry.h"
-#endif //ENABLE_OCPP
+#endif //SMARTEVSE_VERSION
 
 extern Preferences preferences;
 struct DelayedTimeStruct DelayedStartTime;
@@ -291,7 +291,7 @@ uint16_t firmwareUpdateTimer = 0;                                               
                                                                                 // 0 < timer < FW_UPDATE_DELAY means we are in countdown for an actual update
                                                                                 // FW_UPDATE_DELAY <= timer <= 0xffff means we are in countdown for checking
                                                                                 //                                              whether an update is necessary
-#if ENABLE_OCPP && defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
+#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
 uint8_t OcppMode = OCPP_MODE; //OCPP Client mode. 0:Disable / 1:Enable
 
 unsigned char OcppRfidUuid [7];
@@ -319,7 +319,7 @@ MicroOcpp::TxNotification OcppTrackTxNotification;
 unsigned long OcppLastTxNotification;
 
 unsigned long OcppLastOcppResponse = 0; // Timestamp of last OCPP-level response (silence detection, see ocpp_silence_decide)
-#endif //ENABLE_OCPP
+#endif //SMARTEVSE_VERSION
 
 EXT uint32_t elapsedmax, elapsedtime;
 
@@ -1888,7 +1888,7 @@ static unsigned int locktimer = 0, unlocktimer = 0;
     if (!Config && Lock) {                                      // Socket used and Cable lock enabled?
         // UnlockCable takes precedence over LockCable
         if ((RFIDReader == 2 && AccessStatus == OFF) ||        // One RFID card can Lock/Unlock the charging socket (like a public charging station)
-#if ENABLE_OCPP && defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
+#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
         (OcppMode &&!OcppForcesLock) ||
 #endif
             State == STATE_A) {                                 // The charging socket is unlocked when unplugged from the EV
@@ -1897,7 +1897,7 @@ static unsigned int locktimer = 0, unlocktimer = 0;
             }
         // Lock Cable
         } else if (State != STATE_A                            // Lock cable when connected to the EV
-#if ENABLE_OCPP && defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
+#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
         || (OcppMode && OcppForcesLock)
 #endif
         ) {
@@ -2154,7 +2154,7 @@ void BlinkLed_singlerun(void) {
 
     uint8_t RedPwm, GreenPwm, BluePwm;
 
-#if ENABLE_OCPP && defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
+#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
     if (LedMode) {
         // Public charging station scheme (upstream 3679fe3).
         // Pre-compute millis()/MicroOcpp-dependent booleans here, then call
@@ -2209,7 +2209,7 @@ void BlinkLed_singlerun(void) {
                  getChargePointStatus() == ChargePointStatus_Faulted)) {
         RedPwm = 255; GreenPwm = 0; BluePwm = 0;
     } else
-#endif //ENABLE_OCPP
+#endif //SMARTEVSE_VERSION
     {
         led_rgb_t rgb = led_compute_color(&snap, &ctx);
         RedPwm = rgb.r;

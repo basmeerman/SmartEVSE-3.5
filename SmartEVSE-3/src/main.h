@@ -56,15 +56,11 @@
 #define INJECT_CURRENT_L3 0
 #endif
 
-#ifndef ENABLE_OCPP
-#define ENABLE_OCPP 0
-#endif
-
 #include "debug.h"
 #include "stdint.h"
 #include "main_c.h"
 
-#if ENABLE_OCPP //TODO perhaps move to esp32.h
+#if defined(SMARTEVSE_VERSION) //OCPP runs on ESP32 only; TODO perhaps move to esp32.h
 #include <MicroOcpp/Model/ConnectorBase/Notification.h>
 #endif
 

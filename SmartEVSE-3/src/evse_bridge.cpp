@@ -110,7 +110,7 @@ extern char EVCCID[];
 extern char RequiredEVCCID[];
 #endif
 
-#if ENABLE_OCPP && defined(SMARTEVSE_VERSION)
+#if defined(SMARTEVSE_VERSION)
 extern uint8_t OcppMode;
 extern float OcppCurrentLimit;
 #endif
@@ -290,7 +290,7 @@ void evse_sync_globals_to_ctx(void) {
     ctx->RFIDReader = RFIDReader;
     ctx->CPDutyOverride = CPDutyOverride;
 
-#if ENABLE_OCPP && defined(SMARTEVSE_VERSION)
+#if defined(SMARTEVSE_VERSION)
     ctx->OcppMode = OcppMode;
     ctx->OcppCurrentLimit = OcppCurrentLimit;
 #else
