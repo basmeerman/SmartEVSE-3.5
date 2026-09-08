@@ -377,6 +377,16 @@ bool handle_URI(struct mg_connection *c, struct mg_http_message *hm,  webServerR
             auto freevendIdTag = MicroOcpp::getConfigurationPublic(MO_CONFIG_EXT_PREFIX "FreeVendIdTag");
             doc["ocpp"]["auto_auth_idtag"] = freevendIdTag ? freevendIdTag->getString() : "";
         }
+        {
+            // Meter identity reported in BootNotification. Always readable, so
+            // the operator can check what was sent without an OCPP connection.
+            extern uint8_t OcppMeterManual;
+            extern char OcppMeterType[];
+            extern char OcppMeterSerial[];
+            doc["ocpp"]["meter_manual"] = OcppMeterManual ? 1 : 0;
+            doc["ocpp"]["meter_type"] = OcppMeterType;
+            doc["ocpp"]["meter_serial"] = OcppMeterSerial;
+        }
 
         if (OcppWsClient && OcppWsClient->isConnected()) {
             doc["ocpp"]["status"] = "Connected";
@@ -848,6 +858,40 @@ bool handle_URI(struct mg_connection *c, struct mg_http_message *hm,  webServerR
                         doc["ocpp_auto_auth_idtag"] = freevendIdTag->getString();
                     } else {
                         doc["ocpp_auto_auth_idtag"] = "Can only update when OCPP enabled";
+                    }
+                }
+
+                if(request->hasParam("ocpp_meter_manual")) {
+                    extern uint8_t OcppMeterManual;
+                    OcppMeterManual = request->getParam("ocpp_meter_manual")->value().toInt() ? 1 : 0;
+                    doc["ocpp_meter_manual"] = OcppMeterManual;
+                }
+
+                if(request->hasParam("ocpp_meter_type")) {
+                    extern char OcppMeterType[];
+                    const String value = request->getParam("ocpp_meter_type")->value();
+                    ocpp_validate_result_t vr = ocpp_validate_meter_field(value.c_str());
+                    if (vr == OCPP_VALIDATE_TOO_LONG) {
+                        doc["ocpp_meter_type"] = "Meter type exceeds 25 characters";
+                    } else if (vr != OCPP_VALIDATE_OK) {
+                        doc["ocpp_meter_type"] = "Invalid meter type";
+                    } else {
+                        snprintf(OcppMeterType, OCPP_METER_FIELD_MAX + 1, "%s", value.c_str());
+                        doc["ocpp_meter_type"] = OcppMeterType;
+                    }
+                }
+
+                if(request->hasParam("ocpp_meter_serial")) {
+                    extern char OcppMeterSerial[];
+                    const String value = request->getParam("ocpp_meter_serial")->value();
+                    ocpp_validate_result_t vr = ocpp_validate_meter_field(value.c_str());
+                    if (vr == OCPP_VALIDATE_TOO_LONG) {
+                        doc["ocpp_meter_serial"] = "Meter serial exceeds 25 characters";
+                    } else if (vr != OCPP_VALIDATE_OK) {
+                        doc["ocpp_meter_serial"] = "Invalid meter serial";
+                    } else {
+                        snprintf(OcppMeterSerial, OCPP_METER_FIELD_MAX + 1, "%s", value.c_str());
+                        doc["ocpp_meter_serial"] = OcppMeterSerial;
                     }
                 }
 

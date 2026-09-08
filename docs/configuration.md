@@ -515,6 +515,48 @@ You will need a Backend Provider (BP) that supports the **OCPP 1.6j** protocol. 
 2. Configure an [EV METER](#ev-meter) to measure the energy supplied to the car.
 3. To use the **RFID reader** with OCPP, set the [RFID](#rfid) mode to **Rmt/OCPP**. Note that other RFID modes override OCPP access control.
 
+## OCPP meter identity
+
+At startup SmartEVSE sends a BootNotification describing itself to the backend.
+Two of its fields describe the EV meter:
+
+| OCPP field | Sent by default | Purpose |
+|---|---|---|
+| `meterType` | the built-in meter name, e.g. `Eastron3P` | identifies the meter model |
+| `meterSerialNumber` | not sent | identifies one specific meter |
+
+The default is fine for ordinary billing, but not for schemes that verify the
+meter. Dutch **ERE** registration requires a MID-certified EV meter, and the
+inboekdienstverlener checks that once during onboarding against a conformity
+declaration or type certificate. `Eastron3P` is a 10-character display label,
+not the type-approved model designation on the certificate, so it cannot be
+matched — and the serial number is not readable over Modbus at all.
+
+Tick **Manual** under *Meter info* in the OCPP section of the web UI to enter
+both yourself:
+
+- **Meter type** — the model designation exactly as printed on the meter's type
+  plate, matching its MID declaration, e.g. `Eastron SDM72D-M-MID`.
+- **Meter serial** — the serial number from the same type plate.
+
+Both are limited to 25 characters, the OCPP 1.6 field limit. Leave *Meter type*
+empty to fall back to the built-in name; leave *Meter serial* empty and the
+field is omitted entirely rather than sent blank. Clearing the **Manual** tick
+restores the default behaviour without erasing what you typed.
+
+These three settings are available in the **web UI only** — they are free text
+that no LCD button sequence can enter sensibly, and they are set once at
+onboarding. They are also readable and writable over the REST API.
+
+> **What this is and is not.** SmartEVSE cannot verify that a meter is MID
+> certified; it reports what you tell it. These fields exist so the data the
+> backend receives corroborates the certificate you submit at onboarding — they
+> are not themselves proof of certification.
+
+**The BootNotification is sent once per OCPP session.** After changing these
+values, restart the OCPP connection (disable and re-enable OCPP, or reboot) for
+the backend to see them.
+
 ## Requirements and limitations
 
 - If the backend uses **OCPP SmartCharging** the SmartEVSE internal power sharing [PWR SHARE](#pwr-share) has to be turned off.

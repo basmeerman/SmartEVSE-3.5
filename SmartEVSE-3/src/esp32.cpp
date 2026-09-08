@@ -78,7 +78,6 @@ volatile uint32_t cpPulseCount = 0;  // Count CP rising edge interrupts
 static nvs_shadow_t settingsShadow;
 #define SETTINGS_SLOT 0
 
-// Cache structure for detecting changed values - only write values that actually changed
 
 // MQTT change-only publishing cache and settings
 #if MQTT
@@ -115,12 +114,28 @@ static uint32_t MQTTMsgCount = 0;         // Count of MQTT messages published si
         preferences.putBool(key, value); \
     }
 
+#define PREFS_PUT_STR_IF_CHANGED(key, value) \
+    if (!preferences.isKey(key) || preferences.getString(key) != String(value)) { \
+        preferences.putString(key, value); \
+    }
+
 #define PREFS_PUT_INT_IF_CHANGED(key, value) \
     if (!preferences.isKey(key) || preferences.getInt(key) != (int32_t)(value)) { \
         preferences.putInt(key, value); \
     }
 
 uint16_t LCDPin = 0;                                                        // PINcode to operate LCD keys from web-interface
+
+// OCPP BootNotification meter identity — web UI only, no LCD entry.
+// The firmware knows its meter only by the 10-character EMConfig display name,
+// which is not the type-approved model designation an inboekdienstverlener
+// matches against a MID conformity declaration, and the serial number is not
+// readable over Modbus at all. Both are therefore operator declarations, used
+// to corroborate the documents submitted at onboarding — the charger cannot
+// verify certification itself. Resolution rules: ocpp_resolve_meter_identity().
+uint8_t OcppMeterManual = 0;                                                // 0 = report the built-in meter name
+char OcppMeterType[OCPP_METER_FIELD_MAX + 1] = "";                          // e.g. "Eastron SDM72D-M-MID"
+char OcppMeterSerial[OCPP_METER_FIELD_MAX + 1] = "";                        // serial from the meter's type plate
 uint8_t PIN_SW_IN, PIN_ACTA, PIN_ACTB, PIN_RCM_FAULT, PIN_RS485_RX; //these pins have to be assigned dynamically because of hw version v3.1
 
 extern esp_adc_cal_characteristics_t * adc_chars_CP;
@@ -1461,6 +1476,10 @@ void read_settings() {
 
         CapacityLimit = preferences.getUShort("CapacityLim", 0);
         // Restore monthly peak from NVS
+        OcppMeterManual = preferences.getUChar("OcppMtrManual", 0);
+        preferences.getString("OcppMtrType", OcppMeterType, sizeof(OcppMeterType));
+        preferences.getString("OcppMtrSerial", OcppMeterSerial, sizeof(OcppMeterSerial));
+
         CapacityState.monthly.monthly_peak_w = preferences.getInt("CapPeak", 0);
         CapacityState.monthly.peak_month = preferences.getUChar("CapMonth", 0);
 
@@ -1544,6 +1563,12 @@ void write_settings(void) {
 
     PREFS_PUT_UCHAR_IF_CHANGED("LedMode", LedMode);
     PREFS_PUT_UCHAR_IF_CHANGED("AuthMode", AuthMode);
+
+    PREFS_PUT_UCHAR_IF_CHANGED("OcppMtrManual", OcppMeterManual);
+    // Strings compare against NVS like every other key since the settingsCache
+    // mirror was removed; these two change once during onboarding anyway.
+    PREFS_PUT_STR_IF_CHANGED("OcppMtrType", OcppMeterType);
+    PREFS_PUT_STR_IF_CHANGED("OcppMtrSerial", OcppMeterSerial);
 
     PREFS_PUT_USHORT_IF_CHANGED("CapacityLim", CapacityLimit);
     // Persist monthly peak across reboots. Routed through the change check like
@@ -1657,6 +1682,24 @@ bool ocppLockingTxDefined() {
     return OcppLockingTx != nullptr;
 }
 
+/* BootNotification meter identity, positions 5 and 6 of ChargerCredentials.
+ * The fallback and override rules live in pure C ocpp_resolve_meter_identity()
+ * so they are unit-tested; these wrappers only supply the current settings and
+ * the built-in meter name. A NULL serial makes the library omit the field. */
+static const char *ocppMeterTypeToReport(void) {
+    const char *type = NULL;
+    ocpp_resolve_meter_identity(OcppMeterManual, OcppMeterType, OcppMeterSerial,
+                                (const char *) EMConfig[EVMeter.Type].Desc, &type, NULL);
+    return type;
+}
+
+static const char *ocppMeterSerialToReport(void) {
+    const char *serial = NULL;
+    ocpp_resolve_meter_identity(OcppMeterManual, OcppMeterType, OcppMeterSerial,
+                                (const char *) EMConfig[EVMeter.Type].Desc, NULL, &serial);
+    return serial;
+}
+
 void ocppInit() {
 
     ocpp_telemetry_init(&OcppTelemetry);
@@ -1677,7 +1720,8 @@ void ocppInit() {
 
     mocpp_initialize(
             *OcppWsClient, //WebSocket adapter for MicroOcpp
-            ChargerCredentials("SmartEVSE", "Stegen Electronics", VERSION, String(serialnr).c_str(), NULL, (char *) EMConfig[EVMeter.Type].Desc),
+            ChargerCredentials("SmartEVSE", "Stegen Electronics", VERSION, String(serialnr).c_str(),
+                               ocppMeterSerialToReport(), ocppMeterTypeToReport()),
             filesystem);
 
     //setup OCPP hardware bindings

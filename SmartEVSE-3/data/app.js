@@ -734,6 +734,18 @@ function loadData() {
                     ? 'Auth key configured (enter new value to replace)'
                     : 'Only for SP2 connections';
 
+                /* Meter identity: same first-load-only rule as the fields above,
+                 * so the 5s poll cannot overwrite half-typed input. The manual
+                 * checkbox drives whether the two inputs are editable. */
+                var mtrTypeField = $id('ocpp_meter_type');
+                var mtrSerialField = $id('ocpp_meter_serial');
+                if (!mtrTypeField.value)   mtrTypeField.value   = data.ocpp.meter_type || '';
+                if (!mtrSerialField.value) mtrSerialField.value = data.ocpp.meter_serial || '';
+                if (!ocppMeterManualTouched) {
+                    $id('ocpp_meter_manual').checked = (data.ocpp.meter_manual == 1);
+                    applyOcppMeterManual();
+                }
+
                 $id('ocpp_ws_status').textContent = data.ocpp.status;
             } else {
                 hideById('ocpp_config_outer');
@@ -898,12 +910,32 @@ function toggleEnableOcppAutoAuth() {
  * it externally (same pattern as toggleMqttEdit). */
 function toggleOcppEdit() { /* kept for backward compat, no-op */ }
 
+/* Meter identity fields are only editable with the Manual checkbox ticked; with
+ * it clear, BootNotification reports the built-in meter name and no serial.
+ * `ocppMeterManualTouched` stops the background poll from resetting the
+ * checkbox between a click and the save. */
+var ocppMeterManualTouched = false;
+
+function applyOcppMeterManual() {
+    var on = $id('ocpp_meter_manual').checked;
+    $id('ocpp_meter_type').disabled = !on;
+    $id('ocpp_meter_serial').disabled = !on;
+}
+
+function toggleOcppMeterManual() {
+    ocppMeterManualTouched = true;
+    applyOcppMeterManual();
+}
+
 function configureOcpp() {
     var params = {
         ocpp_update:          1,
         ocpp_backend_url:     $id('ocpp_backend_url').value,
         ocpp_cb_id:           $id('ocpp_cb_id').value,
-        ocpp_auto_auth_idtag: $id('ocpp_auto_auth_idtag').value
+        ocpp_auto_auth_idtag: $id('ocpp_auto_auth_idtag').value,
+        ocpp_meter_manual:    $id('ocpp_meter_manual').checked ? 1 : 0,
+        ocpp_meter_type:      $id('ocpp_meter_type').value,
+        ocpp_meter_serial:    $id('ocpp_meter_serial').value
     };
     /* Security C-2: only include ocpp_auth_key when the user actually typed a
      * new value. The displayed placeholder '••••••••' is a stand-in for the
@@ -1505,6 +1537,9 @@ fetch('/diag/status').then(function(r) { return r.json(); }).then(function(d) {
         '#ocpp_auth_key':          'SP2 Basic-Auth password. Leave empty to keep existing.',
         '#ocpp_auto_auth':         'Auto-authorize every plug-in without RFID (FreeVend mode)',
         '#ocpp_auto_auth_idtag':   'Default idTag sent for auto-authorized sessions',
+        '#ocpp_meter_manual':      'Report the meter model and serial entered below instead of the built-in meter name',
+        '#ocpp_meter_type':        'Meter model designation as printed on the type plate, matching its MID conformity declaration (max 25 chars)',
+        '#ocpp_meter_serial':      'Meter serial number, ties session data to one certified instrument (max 25 chars)',
         /* Diagnostics */
         '#diag_profile': 'Capture profile: general, solar, loadbal, modbus, or fast'
     };

@@ -300,6 +300,75 @@ ocpp_validate_result_t ocpp_validate_auth_key(const char *auth_key) {
     return OCPP_VALIDATE_OK;
 }
 
+/* ---- BootNotification meter identity ---- */
+
+ocpp_validate_result_t ocpp_validate_meter_field(const char *value) {
+    size_t len;
+    size_t i;
+
+    if (!value || value[0] == '\0') {
+        /* Empty means "not set": the resolver falls back or omits the field. */
+        return OCPP_VALIDATE_OK;
+    }
+
+    len = strlen(value);
+    if (len > OCPP_METER_FIELD_MAX) {
+        return OCPP_VALIDATE_TOO_LONG;
+    }
+
+    /* CiString: printable ASCII only. A stray control character would either be
+     * escaped into the BootNotification JSON or rejected by the CSMS, and
+     * neither is a useful failure during onboarding. */
+    for (i = 0; i < len; i++) {
+        unsigned char c = (unsigned char)value[i];
+        if (c < 0x20 || c > 0x7E) {
+            return OCPP_VALIDATE_BAD_CHARS;
+        }
+    }
+
+    return OCPP_VALIDATE_OK;
+}
+
+/* True when a string carries something other than spaces. A field holding only
+ * whitespace is a typo, not a declaration. */
+static bool ocpp_has_content(const char *s) {
+    if (!s) {
+        return false;
+    }
+    while (*s != '\0') {
+        if (*s != ' ' && *s != '\t') {
+            return true;
+        }
+        s++;
+    }
+    return false;
+}
+
+void ocpp_resolve_meter_identity(bool        manual,
+                                 const char *type_override,
+                                 const char *serial_override,
+                                 const char *default_name,
+                                 const char **out_type,
+                                 const char **out_serial) {
+    if (out_type) {
+        if (manual && ocpp_has_content(type_override)) {
+            *out_type = type_override;
+        } else {
+            *out_type = default_name;          /* may itself be NULL: caller omits */
+        }
+    }
+
+    if (out_serial) {
+        /* Only ever reported when the operator entered one. There is no serial
+         * to fall back to — the firmware cannot read it from the meter. */
+        if (manual && ocpp_has_content(serial_override)) {
+            *out_serial = serial_override;
+        } else {
+            *out_serial = NULL;
+        }
+    }
+}
+
 /* ---- IEC 61851 → OCPP StatusNotification mapping ---- */
 
 const char *ocpp_iec61851_to_status(char iec_state, bool evse_ready,
