@@ -5,7 +5,6 @@
  * into the static ring buffer.  Call diag_sample() from timer1s.
  */
 
-#if defined(SMARTEVSE_VERSION)  /* ESP32 firmware only */
 
 #include "main.h"
 #include "esp32.h"
@@ -153,10 +152,8 @@ static void diag_fill_snapshot(diag_snapshot_t *snap)
     snap->pilot_reading = pilot;
 
     /* Modbus health */
-#if !defined(SMARTEVSE_VERSION) || SMARTEVSE_VERSION >=30 && SMARTEVSE_VERSION < 40
     snap->mains_meter_timeout = MainsMeter.Timeout;
     snap->ev_meter_timeout    = EVMeter.Timeout;
-#endif
     snap->mains_meter_type = MainsMeter.Type;
     snap->ev_meter_type    = EVMeter.Type;
 
@@ -230,4 +227,3 @@ int diag_status_json(char *buf, size_t bufsz)
     return n;
 }
 
-#endif /* SMARTEVSE_VERSION */

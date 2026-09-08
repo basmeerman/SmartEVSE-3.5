@@ -1,18 +1,4 @@
-#if MODEM
-#include <stdint.h>
-#include <stdio.h>
-int8_t InitialSoC = -1;                                                     // State of charge of car
-int8_t FullSoC = -1;                                                        // SoC car considers itself fully charged
-int8_t ComputedSoC = -1;                                                    // Estimated SoC, based on charged kWh
-int8_t RemainingSoC = -1;                                                   // Remaining SoC, based on ComputedSoC
-int32_t TimeUntilFull = -1;                                                 // Remaining time until car reaches FullSoC, in seconds
-int32_t EnergyCapacity = -1;                                                // Car's total battery capacity
-int32_t EnergyRequest = -1;                                                 // Requested amount of energy by car
-char EVCCID[32];                                                            // Car's EVCCID (EV Communication Controller Identifer)
-char RequiredEVCCID[32] = "";                                               // Required EVCCID before allowing charging
-#endif
 
-#ifdef SMARTEVSE_VERSION //ESP32
 
 #include <ArduinoJson.h>
 #include <SPI.h>
@@ -60,79 +46,20 @@ char RequiredEVCCID[32] = "";                                               // R
 #include "capacity_peak.h"
 
 //OCPP includes
-#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
 #include <MicroOcpp.h>
 #include <MicroOcppMongooseClient.h>
 #include <MicroOcpp/Core/Configuration.h>
 #include <MicroOcpp/Core/Context.h>
 #include "ocpp_logic.h"
 #include "ocpp_telemetry.h"
-#endif //SMARTEVSE_VERSION
-
-#if SMARTEVSE_VERSION >= 40
-#include <esp_sleep.h>
-#include <driver/uart.h>
-
-#include "wchisp.h"
-#include "qca.h"
-
-SPIClass QCA_SPI1(FSPI);  // The ESP32-S3 has two usable SPI busses FSPI and HSPI
-SPIClass LCD_SPI2(HSPI);
-
-/*    Commands send from ESP32 to CH32V203 over Uart
-/    cmd        Name           Answer/data        Comments
-/---------------------------------------------------------------------------------------------------------------------------------
-/    Ver?    Version           0001              Version of CH32 software
-/    Stat?   Status                              State, Amperage, PP pin, SSR outputs, ACT outputs, VCC enable, Lock input, RCM, Temperature, Error
-/    Amp:    Set AMP           160               Set Chargecurrent A (*10)
-/    Con:    Set Contactors    0-3               0= Both Off, 1= SSR1 ON, 2= SSR2 ON, 3= Both ON
-/    Vcc:    Set VCC           0-1               0= VCC Off, 1= VCC ON
-/    Sol:    Set Solenoid      0-3               0= Both Off, 1= LOCK_R ON, 2= LOCK_W ON, 3= Both ON (or only lock/unlock?)
-/    Led:    Set Led color                       RGB, Fade speed, Blink
-/    485:    Modbus data
-/
-/    Bij wegvallen ZC -> Solenoid unlock (indien locked)
-
-*/
 
 
-// Power Panic handler
-// Shut down ESP to conserve the power we have left. RTC will automatically store powerdown timestamp
-// We can store some important data in flash storage or the RTC chip (2 bytes)
-//
-void PowerPanicESP() {
-
-    _LOG_D("Power Panic!\n");
-    ledcWrite(LCD_CHANNEL, 0);                 // LCD Backlight off
-
-    // Stop SPI bus, and set all QCA data lines low
-    // TODO: store important information.
-
-    gpio_wakeup_enable(GPIO_NUM_8, GPIO_INTR_LOW_LEVEL);
-    esp_sleep_enable_gpio_wakeup();
-
-    esp_light_sleep_start();
-    // ESP32 is now in light sleep mode
-
-    // It will re-enable everything as soon it has woken up again.
-    // When using USB, you will have to unplug, and replug to re-establish the connection
-
-    _LOG_D("Power Back up!\n");
-
-    ledcWrite(LCD_CHANNEL, 50);                 // LCD Backlight on
-}
-
-extern void SendConfigToCH32(void);
-#endif //SMARTEVSE_VERSION
-
-#if SMARTEVSE_VERSION >=30 && SMARTEVSE_VERSION < 40
 // Create a ModbusRTU server, client and bridge instance on Serial1
 ModbusServerRTU MBserver(2000, PIN_RS485_DIR);     // TCP timeout set to 2000 ms
 ModbusClientRTU MBclient(PIN_RS485_DIR);
 static esp_adc_cal_characteristics_t * adc_chars_PP;
 static esp_adc_cal_characteristics_t * adc_chars_Temperature;
 extern ModbusMessage MBEVMeterResponse(ModbusMessage request);
-#endif //SMARTEVSE_VERSION
 
 hw_timer_t * timerA = NULL;
 Preferences preferences;
@@ -162,9 +89,6 @@ struct SettingsCache {
     uint16_t EMIRegister, EMURegister, EMPRegister, EMERegister;
     uint8_t WIFImode;
     uint16_t EnableC2;
-#if MODEM
-    char RequiredEVCCID[32];
-#endif
     uint16_t maxTemp;
     uint8_t PrioStrategy;
     uint16_t RotationInterval;
@@ -176,9 +100,7 @@ struct SettingsCache {
     bool MQTTChangeOnly;
     uint16_t MQTTHeartbeat;
 #endif
-#if defined(SMARTEVSE_VERSION)
     uint8_t OcppMode;
-#endif
     uint8_t LedMode;
     uint8_t AuthMode;
     uint16_t CapacityLimit;
@@ -297,11 +219,9 @@ extern uint16_t OverrideCurrent;
 // Load Balance variables
 extern int16_t IsetBalanced;
 extern uint16_t Balanced[NR_EVSES];
-#if SMARTEVSE_VERSION < 40 //v3
 extern uint16_t BalancedMax[NR_EVSES];
 extern uint8_t BalancedState[NR_EVSES];
 extern uint16_t BalancedError[NR_EVSES];
-#endif
 
 extern Node_t Node[NR_EVSES];
 extern uint16_t BacklightTimer;
@@ -352,7 +272,6 @@ extern uint16_t firmwareUpdateTimer;
                                                                                 //                                              whether an update is necessary
 extern OneWire32& ds();
 
-#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
 extern unsigned char OcppRfidUuid [7];
 extern size_t OcppRfidUuidLen;
 extern unsigned long OcppLastRfidUpdate;
@@ -378,10 +297,8 @@ extern MicroOcpp::TxNotification OcppTrackTxNotification;
 extern unsigned long OcppLastTxNotification;
 
 extern unsigned long OcppLastOcppResponse;
-#endif //SMARTEVSE_VERSION
 
 
-#if SMARTEVSE_VERSION >=30 && SMARTEVSE_VERSION < 40
 // Some low level stuff here to setup the ADC, and perform the conversion.
 //
 //
@@ -453,11 +370,9 @@ void IRAM_ATTR onTimerA() {
   if (sampleidx == 25) sampleidx = 0;
 }
 
-#endif //SMARTEVSE_VERSION
 
 // --------------------------- END of ISR's -----------------------------------------------------
 
-#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
 // Inverse function of SetCurrent (for monitoring and debugging purposes)
 uint16_t GetCurrent() {
     uint32_t DutyCycle = CurrentPWM;
@@ -472,10 +387,8 @@ uint16_t GetCurrent() {
         return 0; //constant +12V
     }
 }
-#endif //SMARTEVSE_VERSION
 
 
-#if SMARTEVSE_VERSION >=30 && SMARTEVSE_VERSION < 40
 // Sample the Temperature sensor.
 //
 int8_t TemperatureSensor() {
@@ -526,7 +439,6 @@ uint8_t ProximityPin() {
     if (Config) MaxCap = MaxCurrent;                                   // Override with MaxCurrent when Fixed Cable is used.
     return MaxCap;
 }
-#endif
 
 
 /**
@@ -575,7 +487,6 @@ void getButtonState() {
     if (ButtonStateOverride != 7 && millis() - LastBtnOverrideTime < 4000)
         ButtonState = ButtonStateOverride;
     else {
-#if SMARTEVSE_VERSION >=30 && SMARTEVSE_VERSION < 40
         pinMatrixOutDetach(PIN_LCD_SDO_B3, false, false);       // disconnect MOSI pin
         pinMode(PIN_LCD_SDO_B3, INPUT);
         pinMode(PIN_LCD_A0_B2, INPUT);
@@ -587,12 +498,6 @@ void getButtonState() {
 
         pinMode(PIN_LCD_SDO_B3, OUTPUT);
         pinMatrixOutAttach(PIN_LCD_SDO_B3, VSPID_IN_IDX, false, false); // re-attach MOSI pin
-#else
-        pinMode(PIN_LCD_A0_B2, INPUT_PULLUP);                  // Switch the shared pin for the middle button to input
-        ButtonState = (digitalRead(BUTTON3)        ? 4 : 0) |  // > (right)
-                      (digitalRead(PIN_LCD_A0_B2)  ? 2 : 0) |  // o (middle)
-                      (digitalRead(BUTTON1)        ? 1 : 0);   // < (left)
-#endif
         pinMode(PIN_LCD_A0_B2, OUTPUT);                        // switch pin back to output
     }
     xSemaphoreGive(buttonMutex);
@@ -643,9 +548,6 @@ void mqtt_receive_callback(const String topic, const String payload) {
     switch (cmd.cmd) {
         case MQTT_CMD_MODE:
             if (cmd.mode == MQTT_MODE_OFF) {
-#if SMARTEVSE_VERSION >= 40
-                Serial1.printf("@ResetModemTimers\n");
-#endif
                 setAccess(OFF);
             } else if (cmd.mode == MQTT_MODE_PAUSE) {
                 setAccess(PAUSE);
@@ -695,7 +597,6 @@ void mqtt_receive_callback(const String topic, const String payload) {
         case MQTT_CMD_MAINS_METER:
             if (MainsMeter.Type != EM_API || LoadBl >= 2)
                 return;
-#if SMARTEVSE_VERSION < 40
             if (LoadBl < 2) {
                 MainsMeter.setTimeout(COMM_TIMEOUT);
                 MainsMeter.Irms[0] = cmd.mains_meter.L1;
@@ -703,10 +604,6 @@ void mqtt_receive_callback(const String topic, const String payload) {
                 MainsMeter.Irms[2] = cmd.mains_meter.L3;
                 CalcIsum();
             }
-#else
-            Serial1.printf("@Irms:%03u,%d,%d,%d\n", MainsMeter.Address,
-                           (int)cmd.mains_meter.L1, (int)cmd.mains_meter.L2, (int)cmd.mains_meter.L3);
-#endif
             break;
 
         case MQTT_CMD_EV_METER:
@@ -715,23 +612,14 @@ void mqtt_receive_callback(const String topic, const String payload) {
             if ((cmd.ev_meter.L1 > -1 && cmd.ev_meter.L1 < 1000) &&
                 (cmd.ev_meter.L2 > -1 && cmd.ev_meter.L2 < 1000) &&
                 (cmd.ev_meter.L3 > -1 && cmd.ev_meter.L3 < 1000)) {
-#if SMARTEVSE_VERSION < 40
                 EVMeter.Irms[0] = cmd.ev_meter.L1;
                 EVMeter.Irms[1] = cmd.ev_meter.L2;
                 EVMeter.Irms[2] = cmd.ev_meter.L3;
                 EVMeter.CalcImeasured();
                 EVMeter.Timeout = COMM_EVTIMEOUT;
-#else
-                Serial1.printf("@Irms:%03u,%d,%d,%d\n", EVMeter.Address,
-                               (int)cmd.ev_meter.L1, (int)cmd.ev_meter.L2, (int)cmd.ev_meter.L3);
-#endif
             }
             if (cmd.ev_meter.W > -1) {
-#if SMARTEVSE_VERSION < 40
                 EVMeter.PowerMeasured = cmd.ev_meter.W;
-#else
-                Serial1.printf("@PowerMeasured:%03u,%d\n", EVMeter.Address, (int)cmd.ev_meter.W);
-#endif
             }
             if (cmd.ev_meter.Wh > -1) {
                 EVMeter.Import_active_energy = cmd.ev_meter.Wh;
@@ -745,20 +633,9 @@ void mqtt_receive_callback(const String topic, const String payload) {
                 return;
             homeBatteryCurrent = cmd.home_battery_current;
             homeBatteryLastUpdate = time(NULL);
-#if SMARTEVSE_VERSION >= 40
-            SEND_TO_CH32(homeBatteryCurrent);
-#endif
             break;
 
         case MQTT_CMD_REQUIRED_EVCCID:
-#if MODEM
-            // SECURITY H-5: strncpy does NOT NUL-terminate when the source fills the buffer.
-            // Without the explicit NUL, the subsequent %s read walks past the buffer end.
-            strncpy(RequiredEVCCID, cmd.evccid, sizeof(RequiredEVCCID));
-            RequiredEVCCID[sizeof(RequiredEVCCID) - 1] = '\0';
-            Serial1.printf("@RequiredEVCCID:%s\n", RequiredEVCCID);
-            request_write_settings();
-#endif
             break;
 
         case MQTT_CMD_COLOR:
@@ -853,16 +730,11 @@ void mqtt_receive_callback(const String topic, const String payload) {
         case MQTT_CMD_CIRCUIT_METER:
             if (CircuitMeter.Type != EM_API || LoadBl >= 2)
                 return;
-#if SMARTEVSE_VERSION < 40
             CircuitMeter.setTimeout(COMM_TIMEOUT);
             CircuitMeter.Irms[0] = cmd.circuit_meter.L1;
             CircuitMeter.Irms[1] = cmd.circuit_meter.L2;
             CircuitMeter.Irms[2] = cmd.circuit_meter.L3;
             CircuitMeter.CalcImeasured();
-#else
-            Serial1.printf("@Irms:%03u,%d,%d,%d\n", CircuitMeter.Address,
-                           (int)cmd.circuit_meter.L1, (int)cmd.circuit_meter.L2, (int)cmd.circuit_meter.L3);
-#endif
             break;
         // END PLAN-14
 
@@ -876,28 +748,6 @@ void mqtt_receive_callback(const String topic, const String payload) {
         // END PLAN-09
 
         // BEGIN PLAN-15: SoC MQTT commands
-#if MODEM
-        case MQTT_CMD_INITIAL_SOC:
-            InitialSoC = cmd.initial_soc;
-            RecomputeSoC();
-            break;
-        case MQTT_CMD_FULL_SOC:
-            FullSoC = cmd.full_soc;
-            RecomputeSoC();
-            break;
-        case MQTT_CMD_ENERGY_CAPACITY:
-            EnergyCapacity = cmd.energy_capacity;
-            RecomputeSoC();
-            break;
-        case MQTT_CMD_ENERGY_REQUEST:
-            EnergyRequest = cmd.energy_request;
-            RecomputeSoC();
-            break;
-        case MQTT_CMD_EVCCID_SET:
-            strncpy(EVCCID, cmd.evccid, sizeof(EVCCID) - 1);
-            EVCCID[sizeof(EVCCID) - 1] = '\0';
-            break;
-#endif
         // END PLAN-15
 
         default:
@@ -1013,26 +863,6 @@ void SetupMQTTClient() {
         MQTTclient.announce("EV Power L3", "sensor", optional_payload);
     }
 
-#if MODEM
-        //set the parameters for modem/SoC sensor entities:
-        optional_payload = MQTTclient.jsna("unit_of_measurement","%") + MQTTclient.jsna("value_template", R"({{ none if (value | int == -1) else (value | int) }})");
-        MQTTclient.announce("EV Initial SoC", "sensor", optional_payload);
-        MQTTclient.announce("EV Full SoC", "sensor", optional_payload);
-        MQTTclient.announce("EV Computed SoC", "sensor", optional_payload);
-        MQTTclient.announce("EV Remaining SoC", "sensor", optional_payload);
-
-        optional_payload = MQTTclient.jsna("device_class","duration") + MQTTclient.jsna("unit_of_measurement","m") + MQTTclient.jsna("value_template", R"({{ none if (value | int == -1) else (value | int / 60) | round }})");
-        MQTTclient.announce("EV Time Until Full", "sensor", optional_payload);
-
-        optional_payload = MQTTclient.jsna("device_class","energy") + MQTTclient.jsna("unit_of_measurement","Wh") + MQTTclient.jsna("value_template", R"({{ none if (value | int == -1) else (value | int) }})");
-        MQTTclient.announce("EV Energy Capacity", "sensor", optional_payload);
-        MQTTclient.announce("EV Energy Request", "sensor", optional_payload);
-
-        optional_payload = MQTTclient.jsna("value_template", R"({{ none if (value == '') else value }})");
-        MQTTclient.announce("EVCCID", "sensor", optional_payload);
-        optional_payload = MQTTclient.jsna("state_topic", String(MQTTprefix + "/RequiredEVCCID")) + MQTTclient.jsna("command_topic", String(MQTTprefix + "/Set/RequiredEVCCID"));
-        MQTTclient.announce("Required EVCCID", "text", optional_payload);
-#endif
 
     optional_payload = MQTTclient.jsna("device_class","energy") + MQTTclient.jsna("unit_of_measurement","Wh") + MQTTclient.jsna("state_class","total_increasing");
     if (MainsMeter.Type) {
@@ -1090,10 +920,8 @@ void SetupMQTTClient() {
     MQTTclient.announce("RFIDLastRead", "sensor", optional_payload);
     MQTTclient.announce("NrOfPhases", "sensor", optional_payload);
 
-#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
     MQTTclient.announce("OCPP", "sensor", optional_payload);
     MQTTclient.announce("OCPPConnection", "sensor", optional_payload);
-#endif //SMARTEVSE_VERSION
 
     optional_payload = MQTTclient.jsna("state_topic", String(MQTTprefix + "/LEDColorOff")) + MQTTclient.jsna("command_topic", String(MQTTprefix + "/Set/ColorOff"));
     MQTTclient.announce("LED Color Off", "text", optional_payload);
@@ -1134,15 +962,6 @@ void SetupMQTTClient() {
     MQTTclient.announce("ApiStaleCount", "sensor", optional_payload);
     // END PLAN-09
 
-#if MODEM
-        optional_payload = MQTTclient.jsna("unit_of_measurement","%") + MQTTclient.jsna("value_template", R"({{ (value | int / 1024 * 100) | round(0) }})");
-        MQTTclient.announce("CP PWM", "sensor", optional_payload);
-
-        optional_payload = MQTTclient.jsna("value_template", R"({{ none if (value | int == -1) else (value | int / 1024 * 100) | round }})");
-        optional_payload += MQTTclient.jsna("command_topic", String(MQTTprefix + "/Set/CPPWMOverride")) + MQTTclient.jsna("min", "-1") + MQTTclient.jsna("max", "100") + MQTTclient.jsna("mode","slider");
-        optional_payload += MQTTclient.jsna("command_template", R"({{ (value | int * 1024 / 100) | round }})");
-        MQTTclient.announce("CP PWM Override", "number", optional_payload);
-#endif
     //set the parameters for and MQTTclient.announce select entities, overriding automatic state_topic:
     optional_payload = MQTTclient.jsna("state_topic", String(MQTTprefix + "/Mode")) + MQTTclient.jsna("command_topic", String(MQTTprefix + "/Set/Mode"));
     optional_payload += String(R"(, "options" : ["Off", "Normal", "Smart", "Solar", "Pause"])");
@@ -1326,26 +1145,6 @@ void mqttPublishData() {
         mqtt_pub_str(MQTT_SLOT_EV_PLUG_STATE, "/EVPlugState", (pilot != PILOT_12V) ? "Connected" : "Disconnected", true, now_s);
         mqtt_pub_str(MQTT_SLOT_WIFI_SSID, "/WiFiSSID", WiFi.SSID().c_str(), true, now_s);
         mqtt_pub_str(MQTT_SLOT_WIFI_BSSID, "/WiFiBSSID", WiFi.BSSIDstr().c_str(), true, now_s);
-#if MODEM
-        mqtt_pub_int(MQTT_SLOT_CPPWM, "/CPPWM", CurrentPWM, false, now_s);
-        { // CPPWMOverride is string-typed: either the PWM value or "-1"
-            char cppwm_buf[8];
-            if (CPDutyOverride)
-                snprintf(cppwm_buf, sizeof(cppwm_buf), "%d", (int)CurrentPWM);
-            else
-                snprintf(cppwm_buf, sizeof(cppwm_buf), "-1");
-            mqtt_pub_str(MQTT_SLOT_CPPWM_OVERRIDE, "/CPPWMOverride", cppwm_buf, true, now_s);
-        }
-        mqtt_pub_int(MQTT_SLOT_EV_INITIAL_SOC, "/EVInitialSoC", InitialSoC, true, now_s);
-        mqtt_pub_int(MQTT_SLOT_EV_FULL_SOC, "/EVFullSoC", FullSoC, true, now_s);
-        mqtt_pub_int(MQTT_SLOT_EV_COMPUTED_SOC, "/EVComputedSoC", ComputedSoC, true, now_s);
-        mqtt_pub_int(MQTT_SLOT_EV_REMAINING_SOC, "/EVRemainingSoC", RemainingSoC, true, now_s);
-        mqtt_pub_int(MQTT_SLOT_EV_TIME_UNTIL_FULL, "/EVTimeUntilFull", TimeUntilFull, false, now_s);
-        mqtt_pub_int(MQTT_SLOT_EV_ENERGY_CAPACITY, "/EVEnergyCapacity", EnergyCapacity, true, now_s);
-        mqtt_pub_int(MQTT_SLOT_EV_ENERGY_REQUEST, "/EVEnergyRequest", EnergyRequest, true, now_s);
-        mqtt_pub_str(MQTT_SLOT_EVCCID, "/EVCCID", EVCCID, true, now_s);
-        mqtt_pub_str(MQTT_SLOT_REQUIRED_EVCCID, "/RequiredEVCCID", RequiredEVCCID, true, now_s);
-#endif
         if (EVMeter.Type) {
             mqtt_pub_int(MQTT_SLOT_EV_CHARGE_POWER, "/EVChargePower", EVMeter.PowerMeasured, false, now_s);
             mqtt_pub_int(MQTT_SLOT_EV_ENERGY_CHARGED, "/EVEnergyCharged", EVMeter.EnergyCharged, true, now_s);
@@ -1353,7 +1152,6 @@ void mqttPublishData() {
         }
         if (homeBatteryLastUpdate)
             mqtt_pub_int(MQTT_SLOT_HOME_BATTERY_CURRENT, "/HomeBatteryCurrent", homeBatteryCurrent, false, now_s);
-#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
         mqtt_pub_str(MQTT_SLOT_OCPP, "/OCPP", OcppMode ? "Enabled" : "Disabled", true, now_s);
         mqtt_pub_str(MQTT_SLOT_OCPP_CONNECTION, "/OCPPConnection", (OcppWsClient && OcppWsClient->isConnected()) ? "Connected" : "Disconnected", false, now_s);
         mqtt_pub_str(MQTT_SLOT_OCPP_TX_ACTIVE, "/OCPPTxActive", OcppTelemetry.tx_active ? "true" : "false", false, now_s);
@@ -1368,7 +1166,6 @@ void mqttPublishData() {
         }
         mqtt_pub_str(MQTT_SLOT_OCPP_SMART_CHARGING, "/OCPPSmartCharging",
             OcppTelemetry.lb_conflict ? "Conflict" : (!LoadBl ? "Active" : "Inactive"), false, now_s);
-#endif //SMARTEVSE_VERSION
         { // LED color topics — build string in buffer
             char color_buf[16];
             snprintf(color_buf, sizeof(color_buf), "%u,%u,%u", ColorOff[0], ColorOff[1], ColorOff[2]);
@@ -1566,13 +1363,11 @@ void validate_settings(void) {
         EnableC2 = NOT_PRESENT;
     }
 
-#if SMARTEVSE_VERSION < 40 //v3
     // Update master node config; for v4 this is taken care of when receiving the EVMeterType/Address
     if (LoadBl < 2) {
         Node[0].EVMeter = EVMeter.Type;
         Node[0].EVAddress = EVMeter.Address;
     }
-#endif
     // Default to modbus input registers
     if (EMConfig[EM_CUSTOM].Function != 3) EMConfig[EM_CUSTOM].Function = 4;
 
@@ -1585,12 +1380,10 @@ void validate_settings(void) {
         EMConfig[EM_CUSTOM].ERegister = 0;
     }
 
-#if SMARTEVSE_VERSION >=30 && SMARTEVSE_VERSION < 40
     // If the address of the MainsMeter or EVmeter on a Node has changed, we must re-register the Modbus workers.
     if (LoadBl > 1) {
         if (EVMeter.Type && EVMeter.Type != EM_API) MBserver.registerWorker(EVMeter.Address, ANY_FUNCTION_CODE, &MBEVMeterResponse);
     }
-#endif
     MainsMeter.setTimeout(COMM_TIMEOUT);
     EVMeter.setTimeout(COMM_TIMEOUT);                                             // Short Delay, to clear the error message for ~10 seconds.
 
@@ -1663,20 +1456,12 @@ void read_settings() {
 #endif
 
         EnableC2 = (EnableC2_t) preferences.getUShort("EnableC2", ENABLE_C2);
-#if MODEM
-        // SECURITY H-5: NUL-terminate after strncpy — preferences.getString() can
-        // return a string exactly sizeof(RequiredEVCCID) bytes long.
-        strncpy(RequiredEVCCID, preferences.getString("RequiredEVCCID", "").c_str(), sizeof(RequiredEVCCID));
-        RequiredEVCCID[sizeof(RequiredEVCCID) - 1] = '\0';
-#endif
         maxTemp = preferences.getUShort("maxTemp", MAX_TEMPERATURE);
         PrioStrategy = preferences.getUChar("PrioStrategy", PRIO_MODBUS_ADDR);
         RotationInterval = preferences.getUShort("RotationIntvl", 0);
         IdleTimeout = preferences.getUShort("IdleTimeout", 60);
 
-#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
         OcppMode = preferences.getUChar("OcppMode", OCPP_MODE);
-#endif //SMARTEVSE_VERSION
 
         LedMode = preferences.getUChar("LedMode", 0);
         AuthMode = preferences.getUChar("AuthMode", 0);   // Plan 16: default 0 (legacy) on upgrade
@@ -1732,10 +1517,6 @@ void read_settings() {
         settingsCache.EMFunction = EMConfig[EM_CUSTOM].Function;
         settingsCache.WIFImode = WIFImode;
         settingsCache.EnableC2 = EnableC2;
-#if MODEM
-        strncpy(settingsCache.RequiredEVCCID, RequiredEVCCID, sizeof(settingsCache.RequiredEVCCID));
-        settingsCache.RequiredEVCCID[sizeof(settingsCache.RequiredEVCCID) - 1] = '\0';  // SECURITY H-5
-#endif
         settingsCache.maxTemp = maxTemp;
         settingsCache.PrioStrategy = PrioStrategy;
         settingsCache.RotationInterval = RotationInterval;
@@ -1749,9 +1530,7 @@ void read_settings() {
         settingsCache.MQTTChangeOnly = MQTTChangeOnly;
         settingsCache.MQTTHeartbeat = MQTTHeartbeat;
 #endif
-#if defined(SMARTEVSE_VERSION)
         settingsCache.OcppMode = OcppMode;
-#endif
         settingsCache.LedMode = LedMode;
         settingsCache.AuthMode = AuthMode;
         settingsCache.CapacityLimit = CapacityLimit;
@@ -1817,13 +1596,6 @@ void write_settings(void) {
     PREFS_PUT_UCHAR_IF_CHANGED("EMFunction", EMConfig[EM_CUSTOM].Function, EMFunction);
     PREFS_PUT_UCHAR_IF_CHANGED("WIFImode", WIFImode, WIFImode);
     PREFS_PUT_USHORT_IF_CHANGED("EnableC2", EnableC2, EnableC2);
-#if MODEM
-    if (!settingsCache.valid || strcmp(RequiredEVCCID, settingsCache.RequiredEVCCID) != 0) {
-        preferences.putString("RequiredEVCCID", String(RequiredEVCCID));
-        strncpy(settingsCache.RequiredEVCCID, RequiredEVCCID, sizeof(settingsCache.RequiredEVCCID));
-        settingsCache.RequiredEVCCID[sizeof(settingsCache.RequiredEVCCID) - 1] = '\0';  // SECURITY H-5
-    }
-#endif
     PREFS_PUT_USHORT_IF_CHANGED("maxTemp", maxTemp, maxTemp);
     PREFS_PUT_UCHAR_IF_CHANGED("PrioStrategy", PrioStrategy, PrioStrategy);
     PREFS_PUT_USHORT_IF_CHANGED("RotationIntvl", RotationInterval, RotationInterval);
@@ -1838,9 +1610,7 @@ void write_settings(void) {
     PREFS_PUT_USHORT_IF_CHANGED("MQTTHrtbt", MQTTHeartbeat, MQTTHeartbeat);
 #endif
 
-#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
     PREFS_PUT_UCHAR_IF_CHANGED("OcppMode", OcppMode, OcppMode);
-#endif //SMARTEVSE_VERSION
 
     PREFS_PUT_UCHAR_IF_CHANGED("LedMode", LedMode, LedMode);
     PREFS_PUT_UCHAR_IF_CHANGED("AuthMode", AuthMode, AuthMode);
@@ -1856,9 +1626,6 @@ void write_settings(void) {
     preferences.end();
 
     _LOG_I("settings saved\n");
-#if SMARTEVSE_VERSION >= 40
-    SendConfigToCH32();
-#endif
 
  } else {
      _LOG_A("Can not open preferences!\n");
@@ -1871,7 +1638,6 @@ void write_settings(void) {
     }
 
     ConfigChanged = 1;                                                          // FIXME this variable never reset to 0?
-    SEND_TO_CH32(ConfigChanged);
 
     // Update timestamp after successful write
     LastSettingsWriteTime = millis();
@@ -1912,81 +1678,6 @@ int StoreTimeString(String DelayedTimeStr, DelayedTimeStruct *DelayedTime) {
 }
 
 
-#if MODEM
-// Recompute State of Charge, in case we have a known initial state of charge
-// This function is called by kWh logic and after an EV state update through API, Serial or MQTT
-void RecomputeSoC(void) {
-    if (InitialSoC > 0 && FullSoC > 0 && EnergyCapacity > 0) {
-        if (InitialSoC == FullSoC) {
-            // We're already at full SoC
-            ComputedSoC = FullSoC;
-            RemainingSoC = 0;
-            TimeUntilFull = -1;
-        } else {
-            int EnergyRemaining = -1;
-            int TargetEnergyCapacity = (FullSoC / 100.f) * EnergyCapacity;
-
-            if (EnergyRequest > 0) {
-                // Attempt to use EnergyRequest to determine SoC with greater accuracy
-                EnergyRemaining = EVMeter.EnergyCharged > 0 ? (EnergyRequest - EVMeter.EnergyCharged) : EnergyRequest;
-            } else {
-                // We use a rough estimation based on FullSoC and EnergyCapacity
-                EnergyRemaining = TargetEnergyCapacity - (EVMeter.EnergyCharged + (InitialSoC / 100.f) * EnergyCapacity);
-            }
-
-            RemainingSoC = ((FullSoC * EnergyRemaining) / TargetEnergyCapacity);
-            ComputedSoC = RemainingSoC > 1 ? (FullSoC - RemainingSoC) : FullSoC;
-
-            // Only attempt to compute the SoC and TimeUntilFull if we have a EnergyRemaining and PowerMeasured
-            if (EnergyRemaining > -1) {
-                int TimeToGo = -1;
-                // Do a very simple estimation in seconds until car would reach FullSoC according to current charging power
-                if (EVMeter.PowerMeasured > 0) {
-                    // Use real-time PowerMeasured data if available
-                    TimeToGo = (3600 * EnergyRemaining) / EVMeter.PowerMeasured;
-                } else if (Mode != MODE_SOLAR && MaxCapacity != 0) { //prevent divide by zero
-                    // Else, fall back on the theoretical maximum of the cable + nr of phases
-                    TimeToGo = (3600 * EnergyRemaining) / (MaxCapacity * (Nr_Of_Phases_Charging * 230));
-                }
-
-                // Wait until we have a somewhat sensible estimation while still respecting granny chargers
-                if (TimeToGo < 100000) {
-                    TimeUntilFull = TimeToGo;
-                }
-            }
-
-            // We can't possibly charge to over 100% SoC
-            if (ComputedSoC > FullSoC) {
-                ComputedSoC = FullSoC;
-                RemainingSoC = 0;
-                TimeUntilFull = -1;
-            }
-
-            _LOG_I("SoC: EnergyRemaining %i RemaningSoC %i EnergyRequest %i EnergyCharged %i EnergyCapacity %i ComputedSoC %i FullSoC %i TimeUntilFull %i TargetEnergyCapacity %i\n", EnergyRemaining, RemainingSoC, EnergyRequest, EVMeter.EnergyCharged, EnergyCapacity, ComputedSoC, FullSoC, TimeUntilFull, TargetEnergyCapacity);
-        }
-    } else {
-        if (TimeUntilFull != -1) TimeUntilFull = -1;
-    }
-    // There's also the possibility an external API/app is used for SoC info. In such case, we allow setting ComputedSoC directly.
-}
-
-
-// EV disconnected from charger. Triggered after 60 seconds of disconnect
-// This is done so we can "re-plug" the car in the Modem process without triggering disconnect events
-void DisconnectEvent(void){
-    _LOG_A("EV disconnected for a while. Resetting SoC states");
-    uint8_t ModemStage = 0; // Enable Modem states again
-    SEND_TO_CH32(ModemStage)
-    InitialSoC = -1;
-    FullSoC = -1;
-    RemainingSoC = -1;
-    ComputedSoC = -1;
-    EnergyCapacity = -1;
-    EnergyRequest = -1;
-    TimeUntilFull = -1;
-    strncpy(EVCCID, "", sizeof(EVCCID));
-}
-#endif //MODEM
 
 
 // handle_URI() has been moved to http_handlers.cpp
@@ -1995,7 +1686,6 @@ void DisconnectEvent(void){
 /*
  * OCPP-related function definitions
  */
-#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
 
 void ocppUpdateRfidReading(const unsigned char *uuid, size_t uuidLen) {
     if (!uuid || uuidLen > sizeof(OcppRfidUuid)) {
@@ -2110,13 +1800,6 @@ void ocppInit() {
         "Temperature",
         "Celsius");
 
-#if MODEM
-        addMeterValueInput([] () {
-                return (float)ComputedSoC;
-            },
-            "SoC",
-            "Percent");
-#endif
 
     addErrorCodeInput([] () {
         return (ErrorFlags & TEMP_HIGH) ? "HighTemperature" : (const char*)nullptr;
@@ -2487,24 +2170,8 @@ void ocppLoop() {
     }
 
 }
-#endif //SMARTEVSE_VERSION
 
 
-#if SMARTEVSE_VERSION >=40
-void WCHUPDATE(unsigned long RunningVersion) {
-        // we reset before flashing because when the WCH chip is sending messages (by printf) the programming can fail
-        _LOG_D("reset WCH ic\n");
-        WchReset();
-        if (WchFirmwareUpdate(RunningVersion)) {
-            _LOG_A("Firmware update failed.\n");
-        } else { 
-            _LOG_D("WCH programming done\n");
-        }    
-        // should not be needed to reset the WCH ic at powerup/reset on the production version.
-        _LOG_D("reset WCH ic\n");
-        WchReset();
-}
-#endif
 
 
 void BuzzConfirmation (void) {
@@ -2559,7 +2226,6 @@ void setup() {
     }
     ds(); // initialize OneWire32 object on use, to avoid static initialization order fiasco
 
-#if SMARTEVSE_VERSION >=30 && SMARTEVSE_VERSION < 40
 
     pinMode(PIN_CP_OUT, OUTPUT);            // CP output
     //pinMode(PIN_SW_IN, INPUT);            // SW Switch input, handled by OneWire32 class
@@ -2685,100 +2351,6 @@ void setup() {
     }
     
 
-#else //SMARTEVSE_VERSION v4
-
-    //lower the CPU frequency to 160, 80, 40 MHz
-    setCpuFrequencyMhz(160);
-
-    pinMode(PIN_QCA700X_CS, OUTPUT);           // SPI_CS QCA7005
-    pinMode(PIN_QCA700X_INT, INPUT);           // SPI_INT QCA7005
-    pinMode(SPI_SCK, OUTPUT);
-    pinMode(SPI_MISO, INPUT);
-    pinMode(SPI_MOSI, OUTPUT);
-    pinMode(PIN_QCA700X_RESETN, OUTPUT);
-
-    pinMode(BUTTON1, INPUT_PULLUP);
-    pinMode(BUTTON3, INPUT_PULLUP);
-
-    pinMode(LCD_LED, OUTPUT);               // LCD backlight
-    pinMode(PIN_LCD_RST, OUTPUT);           // LCD reset, active high
-    pinMode(LCD_SDA, OUTPUT);               // LCD Data
-    pinMode(LCD_SCK, OUTPUT);               // LCD Clock
-    pinMode(PIN_LCD_A0_B2, OUTPUT);             // Select button + A0 LCD
-    pinMode(LCD_CS, OUTPUT);
-
-    pinMode(WCH_SWDIO, INPUT);              // WCH-Link (unused/unconnected)
-    pinMode(WCH_SWCLK, INPUT);              // WCH-Link (unused) / BOOT0 select
-    pinMode(WCH_NRST, INPUT);               // WCH NRST
-
-
-    // shutdown QCA is done by the WCH32V, we set all IO pins low, so no current is flowing into the powered down chip.
-    digitalWrite(PIN_QCA700X_CS, LOW);
-    digitalWrite(PIN_QCA700X_RESETN, LOW);
-    digitalWrite(SPI_SCK, LOW);
-    digitalWrite(SPI_MOSI, LOW);
-
-    // configure SPI connection to QCA modem
-    QCA_SPI1.begin(SPI_SCK, SPI_MISO, SPI_MOSI, PIN_QCA700X_CS);
-    // SPI mode is MODE3 (Idle = HIGH, clock in on rising edge), we use a 10Mhz SPI clock
-    QCA_SPI1.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE3));
-    //attachInterrupt(digitalPinToInterrupt(PIN_QCA700X_INT), SPI_InterruptHandler, RISING);
-
-    // Setup SWDIO pin as Power Panic interrupt received from the WCH uC. (unused, we use serial comm)
-    //attachInterrupt(WCH_SWDIO, PowerPanicESP, FALLING);
-
-    Serial.setTxBufferSize(2048);                                       // prevent error message: [HWCDC.cpp:467] write(): write failed due to waiting USB Host - timeout
-    Serial.begin();                                                     // Debug output on USB
-    Serial.setTxTimeoutMs(1);                                           // Workaround for Serial.print while unplugged USB.
-                                                                        // log_d does not have this issue?
-    Serial1.setRxBufferSize(2048);                                      // increase RX/TX buffers, prevent buffer overruns
-    Serial1.setTxBufferSize(2048);
-    Serial1.begin(FUNCONF_UART_PRINTF_BAUD, SERIAL_8N1, USART_RX, USART_TX, false);       // Serial connection to main board microcontroller
-    //Serial2.begin(115200, SERIAL_8N1, USART_TX, -1, false);
-    Serial.printf("\nSmartEVSE v4 powerup\n");
-
-    _LOG_D("Total heap: %u.\n", ESP.getHeapSize());
-    _LOG_D("Free heap: %u.\n", ESP.getFreeHeap());
-    _LOG_D("Flash Size: %u.\n", ESP.getFlashChipSize());
-    _LOG_D("Total PSRAM: %u.\n", ESP.getPsramSize());
-    _LOG_D("Free PSRAM: %u.\n", ESP.getFreePsram());
-
-
-    // configure SPI connection to LCD
-    // SPI_SCK, SPI_MOSI and LCD_CS pins are used.
-    LCD_SPI2.begin(LCD_SCK, -1, LCD_SDA, LCD_CS);
-    // the ST7567's max SPI Clock frequency is 20Mhz at 3.3V/25C
-    // We choose 10Mhz here, to reserve some room for error.
-    // SPI mode is MODE3 (Idle = HIGH, clock in on rising edge)
-    LCD_SPI2.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE3));
-    // Dummy transaction, to make sure SCLK idles high (IDF bug?)
-    LCD_SPI2.transfer(0);
-    _LOG_D("SPI for LCD configured.\n");
-
-    //GLCD_init();                                // Initialize LCD
-
-
-    ledcSetup(LCD_CHANNEL, 5000, 8);            // LCD channel 5, 5kHz, 8 bit
-    ledcAttachPin(LCD_LED, LCD_CHANNEL);
-    ledcWrite(LCD_CHANNEL, 255);                // Set LCD backlight brightness 0-255
-
-    digitalWrite(PIN_QCA700X_RESETN, HIGH);         // get modem out of reset
-    esp_read_mac(myMac, ESP_MAC_ETH); // select the Ethernet MAC
-extern void setSeccIp();
-    setSeccIp();  // use myMac to create link-local IPv6 address.
-extern uint8_t modem_state;
-    modem_state = MODEM_POWERUP;
-    // Create Task 20ms Timer
-extern void Timer20ms(void * parameter);
-    xTaskCreate(
-        Timer20ms,      // Function that should be called
-        "Timer20ms",    // Name of the task (for debugging)
-        10240,          // Stack size (bytes)
-        NULL,           // Parameter to pass
-        1,              // Task priority
-        NULL            // Task handle
-    );
-#endif //SMARTEVSE_VERSION
 
     // Read all settings from non volatile memory; MQTTprefix will be overwritten if stored in NVS
     read_settings();                                                            // initialize with default data when starting for the first time
@@ -2803,54 +2375,6 @@ extern void Timer20ms(void * parameter);
     BacklightTimer = BACKLIGHT;
     GLCD_init();
 
-#if SMARTEVSE_VERSION >=40 //v4
-
-    // After powerup request WCH version (version?)
-    // then send Configuration to WCH
-    unsigned long FlashTimeout = millis();
-    uint16_t RXbyte, idx = 0;
-    char *ret;
-    char RxBuf[512];
-    bool gotVersion = false;
-    do {
-        Serial1.print("@version?\n");            // send command to WCH ic
-        _LOG_V("[->] version?\n");
-
-        vTaskDelay(100 / portTICK_PERIOD_MS);
-
-        // ESP32 requests version info from CH32; we need to do this outside of the ESP32 10ms routines because
-        // we can not communicate with the CH32 and simultaneously reprogram it.
-        if (Serial1.available()) {
-            while (Serial1.available() && idx<sizeof(RxBuf)) {      // make sure buffer does not overflow
-                RXbyte = Serial1.read();
-                RxBuf[idx] = RXbyte;
-                idx++;
-            }
-            _LOG_D("[(%u)<-] %.*s.\n", idx, idx, RxBuf);
-        }
-
-        // process data from mainboard
-        if (idx > 5) {
-            char token[64];
-            strncpy(token, "version:", sizeof(token));
-            ret = strstr(RxBuf, token);
-            if (ret != NULL) {
-                unsigned long WCHRunningVersion = atoi(ret+strlen(token));
-                _LOG_V("version %lu received\n", WCHRunningVersion);
-                WCHUPDATE(WCHRunningVersion);
-                gotVersion = true;
-            }
-            memset(RxBuf,0,idx);                                    // Clear buffer
-            idx = 0;
-        }
-
-    } while (!gotVersion && millis() - FlashTimeout < 10000);       // only try for 10s, then release so ESP32 can boot and OTA updates are possible
-    memset(RxBuf, 0, sizeof(RxBuf));                                // clear SerialBuffer
-
-    if (!gotVersion) {                                              // we timed out
-        WCHUPDATE(0);
-    }
-#endif
 
     // Initialize state machine HAL callbacks (contactor, PWM, state change logging)
     // Must be called after read_settings() so globals are ready for evse_sync_globals_to_ctx()
@@ -2877,7 +2401,6 @@ extern void Timer20ms(void * parameter);
     );
 
 
-#if SMARTEVSE_VERSION >=30 && SMARTEVSE_VERSION < 40
     // Create Task 100ms Timer
     xTaskCreate(
         Timer100ms,     // Function that should be called
@@ -2887,7 +2410,6 @@ extern void Timer20ms(void * parameter);
         3,              // Task priority - medium
         NULL            // Task handle
     );
-#endif //SMARTEVSE_VERSION
 
     // Create Task Second Timer (1000ms)
     xTaskCreate(
@@ -2902,13 +2424,11 @@ extern void Timer20ms(void * parameter);
     WiFiSetup();
 
 
-#if SMARTEVSE_VERSION >=30 && SMARTEVSE_VERSION < 40
     Nr_Of_Phases_Charging = Force_Single_Phase_Charging() ? 1 : 3;              // to prevent unnecessary switching after boot
     // Set eModbus LogLevel to 1, to suppress possible E5 errors
     MBUlogLvl = LOG_LEVEL_CRITICAL;
     ConfigureModbusMode(255);
     PILOT_CONNECTED;           // CP signal ACTIVE
-#endif
 
     firmwareUpdateTimer = random(FW_UPDATE_DELAY, 0xffff);
 }
@@ -2964,7 +2484,6 @@ bool fwNeedsUpdate(char * version) {
     lastCheck_homewizard = currentTime;
 
     const auto result = getMainsFromHomeWizardP1();
-#if SMARTEVSE_VERSION < 40 //v3
     for (int i = 0; i < result.phases; i++)
         MainsMeter.Irms[i] = result.currents[i];
     if (result.phases) {
@@ -2977,9 +2496,6 @@ bool fwNeedsUpdate(char * version) {
         CalcIsum();
         MainsMeter.setTimeout(COMM_TIMEOUT);
     }
-#else
-    Serial1.printf("@Irms:%03u,%d,%d,%d\n", MainsMeter.Address, result.currents[0], result.currents[1], result.currents[2]); //Irms:011,312,123,124 means: the meter on address 11(dec) has Irms[0] 312 dA, Irms[1] of 123 dA, Irms[2] of 124 dA
-#endif
 }
 
 void loop() {
@@ -2993,15 +2509,10 @@ void loop() {
     if (millis() - lastCheck >= 1000) {
         lastCheck = millis();
         //this block is for non-time critical stuff that needs to run approx 1 / second
-#if !defined(SMARTEVSE_VERSION) || SMARTEVSE_VERSION >=30 && SMARTEVSE_VERSION < 40 //not on ESP32 v4
         //printStatus:
         _LOG_I ("STATE: %s Error: %u StartCurrent: -%i ChargeDelay: %u SolarStopTimer: %u NoCurrent: %u Imeasured: %.1f A IsetBalanced: %.1f A, MainsMeter.Timeout=%u, EVMeter.Timeout=%u.\n", getStateName(State), ErrorFlags, StartCurrent, ChargeDelay, SolarStopTimer,  NoCurrent, (float)MainsMeter.Imeasured/10, (float)IsetBalanced/10, MainsMeter.Timeout, EVMeter.Timeout);
-#else
-        _LOG_I ("STATE: %s Error: %u StartCurrent: -%i ChargeDelay: %u SolarStopTimer: %u NoCurrent: %u Imeasured: %.1f A IsetBalanced: %.1f A.\n", getStateName(State), ErrorFlags, StartCurrent, ChargeDelay, SolarStopTimer,  NoCurrent, (float)MainsMeter.Imeasured/10, (float)IsetBalanced/10);
-#endif
         _LOG_I("L1: %.1f A L2: %.1f A L3: %.1f A Isum: %.1f A\n", (float)MainsMeter.Irms[0]/10, (float)MainsMeter.Irms[1]/10, (float)MainsMeter.Irms[2]/10, (float)Isum/10);
 
-#if SMARTEVSE_VERSION >=30 && SMARTEVSE_VERSION < 40 //v3
         // check if settings need to be written
         // and only write when enough time has passed
         if (SettingsDirty) {
@@ -3011,7 +2522,6 @@ void loop() {
                 write_settings();
             }
         }
-#endif
 
          // a reboot is requested, but we kindly wait until EV is not charging
         static uint8_t RebootDelay = 5;      
@@ -3088,7 +2598,6 @@ void loop() {
     }
 
     //OCPP lifecycle management
-#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
     if (OcppMode && !getOcppContext() && WiFi.isConnected()) {
         ocppInit();
     } else if (!OcppMode && getOcppContext()) {
@@ -3098,7 +2607,5 @@ void loop() {
     if (OcppMode && getOcppContext()) {
         ocppLoop();
     }
-#endif //SMARTEVSE_VERSION
 
 }
-#endif //ESP32

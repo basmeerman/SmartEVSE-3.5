@@ -178,7 +178,7 @@ Every push and pull request triggers a 10-job CI pipeline:
 | **static-analysis** | cppcheck + GCC stack analysis | Uninitialized variables, style issues, stack overflow risk |
 | **memory-sanitizers** | ASan + UBSan zero violations | Buffer overflows, use-after-free, undefined behavior |
 | **valgrind** | Zero leaks | Memory leaks, invalid reads/writes |
-| **firmware-build** | ESP32 + CH32 compile, memory budget | Type errors, missing symbols, flash/RAM budget violations |
+| **firmware-build** | ESP32 compile, memory budget | Type errors, missing symbols, flash/RAM budget violations |
 | **traceability** | Report generation + auto-commit | SbE annotation completeness, requirement coverage |
 | **bdd-tests** | Python pytest feature tests | Higher-level behavioral validation |
 | **ocpp-compatibility** | 50 OCPP 1.6J protocol tests | Message format, sequencing, provider compatibility |
@@ -216,7 +216,7 @@ Developer writes code
          ▼                                        │
 ┌─────────────────┐    FAIL → Fix build/budget    │
 │ Firmware Build   │──────────────────────────────┤
-│ (ESP32 + CH32)   │                              │
+│ (ESP32)          │                              │
 └────────┬────────┘                              │
          │ PASS                                   │
          ▼                                        │
@@ -263,8 +263,6 @@ cppcheck --enable=warning,style,performance --error-exitcode=1 \
 # 4. ESP32 firmware build
 pio run -e release -d SmartEVSE-3/
 
-# 5. CH32 firmware build
-pio run -e ch32 -d SmartEVSE-3/
 ```
 
 Skipping any step is not permitted. Native tests alone are insufficient — they
@@ -297,7 +295,6 @@ The CI pipeline enforces strict memory budgets:
 | Target | Flash budget | RAM budget | Current usage |
 |--------|-------------|-----------|---------------|
 | ESP32 | 95% (1,640 KB) | 90% (288 KB) | ~84% / ~21% |
-| CH32 | 95% (61 KB) | 90% (18 KB) | ~59% / ~19% |
 
 Every firmware build in CI reports flash and RAM usage. Builds that exceed the
 budget are rejected. This prevents creeping memory growth from accumulating

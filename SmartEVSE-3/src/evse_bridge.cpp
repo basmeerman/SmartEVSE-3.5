@@ -12,32 +12,22 @@
 
 #include "main.h"
 #include "meter.h"
-#ifdef SMARTEVSE_VERSION
 #include "esp32.h"
-#else
-#include "ch32v003fun.h"
-#include "ch32.h"
-#endif
 #include "evse_bridge.h"
 #include "capacity_peak.h"
 
 // Only build bridge for platforms that run the state machine locally
-#if !defined(SMARTEVSE_VERSION) || (SMARTEVSE_VERSION >= 30 && SMARTEVSE_VERSION < 40)
 
 // ---- Global context instance ----
 evse_ctx_t g_evse_ctx;
 
 // ---- Spinlock for sync functions ----
-#ifdef SMARTEVSE_VERSION
 static portMUX_TYPE evse_sync_spinlock = portMUX_INITIALIZER_UNLOCKED;
 static SemaphoreHandle_t evse_ctx_mutex = NULL;
-#endif
 
 // ---- External references to firmware globals ----
 // (Most are declared in main.h / main_c.h or as file-scope in main.cpp)
-#ifdef SMARTEVSE_VERSION
 extern uint8_t PIN_ACTA, PIN_ACTB;  // Dynamically assigned in esp32.cpp
-#endif
 extern uint8_t State;
 extern uint8_t Mode;
 extern uint8_t LoadBl;
@@ -77,9 +67,7 @@ extern uint16_t StopTime;
 extern uint16_t ImportCurrent;
 extern int8_t TempEVSE;
 extern uint16_t maxTemp;
-#ifdef SMARTEVSE_VERSION
 extern uint8_t RCmon;
-#endif
 extern uint8_t ActivationMode;
 extern uint8_t ActivationTimer;
 extern uint8_t PrioStrategy;
@@ -105,21 +93,14 @@ extern uint8_t LeaveModemDoneStateTimer;
 extern uint8_t LeaveModemDeniedStateTimer;
 extern bool PilotDisconnected;
 extern uint8_t PilotDisconnectTime;
-#if MODEM
-extern char EVCCID[];
-extern char RequiredEVCCID[];
-#endif
 
-#if defined(SMARTEVSE_VERSION)
 extern uint8_t OcppMode;
 extern float OcppCurrentLimit;
-#endif
 
 // Additional externs for state-change callback and bridge functions
 extern const char StrStateName[15][13];
 extern void setSolarStopTimer(uint16_t Timer);
 extern void setChargeDelay(uint8_t delay);
-#ifdef SMARTEVSE_VERSION
 extern struct tm timeinfo;
 extern hw_timer_t *timerA;
 extern uint8_t LCDTimer;
@@ -131,10 +112,6 @@ extern void GLCD(void);
 extern uint8_t lastMqttUpdate;
 #endif
 extern void request_write_settings(void);
-#else
-extern uint8_t RCMTestCounter;
-extern void testRCMON(void);
-#endif
 
 // ---- HAL callbacks ----
 // Map module's HAL function pointers to firmware hardware
@@ -181,15 +158,11 @@ static void hal_actuator_off(void) {
 static void hal_on_state_change(uint8_t old_state, uint8_t new_state) {
     // === LOGGING ===
     if (old_state != new_state) {
-#ifdef SMARTEVSE_VERSION
         char Str[50];
         snprintf(Str, sizeof(Str), "%02d:%02d:%02d STATE %s -> %s\n",
                  timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
                  StrStateName[old_state], StrStateName[new_state]);
         _LOG_A("%s", Str);
-#else
-        printf("@State:%u.\n", new_state);
-#endif
     }
 
     // === PER-STATE PLATFORM ACTIONS ===
@@ -200,16 +173,11 @@ static void hal_on_state_change(uint8_t old_state, uint8_t new_state) {
             }
             // fall through
         case STATE_A:
-#ifdef SMARTEVSE_VERSION
             timerAlarmWrite(timerA, PWM_100, true);
             timerAlarmEnable(timerA);                                   // Re-enable in case STATE_B's single-shot (auto_reload=false) fired and disabled the alarm — otherwise CP sampling stops and cable disconnect in PAUSE is not detected (upstream e6110b1, fixes #347)
-#else
-            TIM1->CH1CVR = 1000;
-#endif
             break;
 
         case STATE_B:
-#ifdef SMARTEVSE_VERSION
             // Reset timer counter before setting alarm to ensure the alarm
             // fires even after long periods without CP pulses (e.g., after
             // ACTSTART where 0% duty means no rising edges to reset timer).
@@ -217,20 +185,10 @@ static void hal_on_state_change(uint8_t old_state, uint8_t new_state) {
             // alarm value, causing the alarm to never fire.
             timerWrite(timerA, 0);
             timerAlarmWrite(timerA, PWM_95, false);
-#else
-            TIM1->CH4CVR = PWM_96;
-#endif
             break;
 
         case STATE_C:
-#ifdef SMARTEVSE_VERSION
             LCDTimer = 0;
-#else
-            printf("@LCDTimer:0\n");
-            RCMTestCounter = RCM_TEST_DURATION;
-            SEND_TO_ESP32(RCMTestCounter);
-            testRCMON();
-#endif
             {
                 uint8_t nrPhases = g_evse_ctx.Nr_Of_Phases_Charging;
                 Nr_Of_Phases_Charging = nrPhases;
@@ -243,12 +201,8 @@ static void hal_on_state_change(uint8_t old_state, uint8_t new_state) {
             break;
 
         case STATE_C1:
-#ifdef SMARTEVSE_VERSION
             timerAlarmWrite(timerA, PWM_100, true);
             timerAlarmEnable(timerA);                                   // See STATE_A note (upstream e6110b1)
-#else
-            TIM1->CH1CVR = 1000;
-#endif
             break;
 
         default:
@@ -256,30 +210,22 @@ static void hal_on_state_change(uint8_t old_state, uint8_t new_state) {
     }
 
     // === LCD REFRESH (v3 ESP32 only) ===
-#ifdef SMARTEVSE_VERSION
     if (old_state == STATE_C || old_state == STATE_C1) {
         GLCD_init();
     } else if (new_state == STATE_C && old_state != new_state) {
         if (!LCDNav) GLCD();
     }
-#endif
 
     // === COMMON POST-ACTIONS ===
 #if MQTT
     lastMqttUpdate = 10;
 #endif
-#ifdef SMARTEVSE_VERSION
     BacklightTimer = BACKLIGHT;
-#else
-    printf("@BacklightTimer:%u\n", BACKLIGHT);
-#endif
 }
 
 // ---- Sync: globals -> ctx ----
 void evse_sync_globals_to_ctx(void) {
-#ifdef SMARTEVSE_VERSION
     portENTER_CRITICAL(&evse_sync_spinlock);
-#endif
     evse_ctx_t *ctx = &g_evse_ctx;
 
     ctx->State = State;
@@ -290,13 +236,8 @@ void evse_sync_globals_to_ctx(void) {
     ctx->RFIDReader = RFIDReader;
     ctx->CPDutyOverride = CPDutyOverride;
 
-#if defined(SMARTEVSE_VERSION)
     ctx->OcppMode = OcppMode;
     ctx->OcppCurrentLimit = OcppCurrentLimit;
-#else
-    ctx->OcppMode = false;
-    ctx->OcppCurrentLimit = -1.0f;
-#endif
 
     ctx->MaxMains = MaxMains;
     ctx->MaxCurrent = MaxCurrent;
@@ -364,10 +305,6 @@ void evse_sync_globals_to_ctx(void) {
     ctx->ToModemDoneStateTimer = ToModemDoneStateTimer;
     ctx->LeaveModemDoneStateTimer = LeaveModemDoneStateTimer;
     ctx->LeaveModemDeniedStateTimer = LeaveModemDeniedStateTimer;
-#if MODEM
-    memcpy(ctx->RequiredEVCCID, RequiredEVCCID, sizeof(ctx->RequiredEVCCID));
-    memcpy(ctx->EVCCID, EVCCID, sizeof(ctx->EVCCID));
-#endif
 
     ctx->PilotDisconnected = PilotDisconnected;
     ctx->PilotDisconnectTime = PilotDisconnectTime;
@@ -379,9 +316,7 @@ void evse_sync_globals_to_ctx(void) {
     ctx->TempEVSE = TempEVSE;
     ctx->maxTemp = maxTemp;
     ctx->CapacityHeadroom_da = CapacityHeadroom_da;
-#ifdef SMARTEVSE_VERSION
     ctx->RCmon = RCmon;
-#endif
 
     ctx->ActivationMode = ActivationMode;
     ctx->ActivationTimer = ActivationTimer;
@@ -407,16 +342,12 @@ void evse_sync_globals_to_ctx(void) {
         ctx->Node[i].SolarTimer = Node[i].SolarTimer;
         ctx->Node[i].Mode = Node[i].Mode;
     }
-#ifdef SMARTEVSE_VERSION
     portEXIT_CRITICAL(&evse_sync_spinlock);
-#endif
 }
 
 // ---- Sync: ctx -> globals ----
 void evse_sync_ctx_to_globals(void) {
-#ifdef SMARTEVSE_VERSION
     portENTER_CRITICAL(&evse_sync_spinlock);
-#endif
     evse_ctx_t *ctx = &g_evse_ctx;
 
     State = ctx->State;
@@ -480,44 +411,32 @@ void evse_sync_ctx_to_globals(void) {
         Node[i].SolarTimer = ctx->Node[i].SolarTimer;
         Node[i].Mode = ctx->Node[i].Mode;
     }
-#ifdef SMARTEVSE_VERSION
     portEXIT_CRITICAL(&evse_sync_spinlock);
-#endif
 }
 
 // ---- Transaction-level lock for bridge callers ----
 // Wraps the full sync_to → operate → sync_from cycle so concurrent tasks
 // (Timer10ms, Timer1S, loop/OCPP) cannot corrupt g_evse_ctx mid-transaction.
 void evse_bridge_lock(void) {
-#ifdef SMARTEVSE_VERSION
     xSemaphoreTake(evse_ctx_mutex, portMAX_DELAY);
-#endif
 }
 
 void evse_bridge_unlock(void) {
-#ifdef SMARTEVSE_VERSION
     xSemaphoreGive(evse_ctx_mutex);
-#endif
 }
 
 // ---- Solar debug snapshot reader (spinlock-protected) ----
 void evse_get_solar_debug(evse_solar_debug_t *out) {
     if (!out) return;
-#ifdef SMARTEVSE_VERSION
     portENTER_CRITICAL(&evse_sync_spinlock);
-#endif
     *out = g_evse_ctx.solar_debug;
-#ifdef SMARTEVSE_VERSION
     portEXIT_CRITICAL(&evse_sync_spinlock);
-#endif
 }
 
 // ---- Initialization ----
 void evse_bridge_init(void) {
-#ifdef SMARTEVSE_VERSION
     evse_ctx_mutex = xSemaphoreCreateMutex();
     configASSERT(evse_ctx_mutex);
-#endif
     evse_hal_t hal = {
         .set_cp_duty      = hal_set_cp_duty,
         .contactor1       = hal_contactor1,
@@ -533,4 +452,3 @@ void evse_bridge_init(void) {
     evse_sync_globals_to_ctx();
 }
 
-#endif // CH32 and v3 ESP32

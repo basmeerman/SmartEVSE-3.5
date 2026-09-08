@@ -110,8 +110,8 @@ jobs:
         # compiles out. This step asserts the contract by scanning the
         # release firmware.bin for the URI string. Fail if present.
         #
-        # Runs immediately after the ESP32 release build so subsequent
-        # build steps (CH32, etc.) can't interfere with the artifact paths.
+        # Runs immediately after the ESP32 release build so any later build
+        # step can't interfere with the artifact paths.
         run: |
           set -e
           REL_DIR=SmartEVSE-3/.pio/build/release
@@ -132,10 +132,6 @@ jobs:
             exit 1
           fi
           echo "OK: /automated_testing endpoint is not present in $BIN."
-      - name: Build CH32
-        run: |
-          set -o pipefail
-          pio run -e ch32 -d SmartEVSE-3/ 2>&1 | tee ch32-build.log
       - name: Check firmware memory budget
         run: |
           check_budget() {
@@ -161,8 +157,6 @@ jobs:
           result=0
           # ESP32: 4MB flash (1.75MB OTA partition), 320KB RAM
           check_budget esp32-build.log "ESP32" 95 90 || result=1
-          # CH32: 64KB flash, 20KB RAM - much tighter
-          check_budget ch32-build.log "CH32" 95 90 || result=1
           exit $result
 
   traceability:

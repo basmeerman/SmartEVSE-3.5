@@ -6,7 +6,7 @@ SmartEVSE codebase. Read this entire file before making any changes.
 ## Project Overview
 
 SmartEVSE is an open-source Electric Vehicle Supply Equipment (EVSE) controller.
-The firmware runs on ESP32 (v3/v4) and CH32 microcontrollers. This is safety-critical
+The firmware runs on the ESP32 of SmartEVSE v3. This is safety-critical
 embedded software — incorrect behavior can damage vehicles, trip breakers, or cause
 electrical hazards.
 
@@ -151,18 +151,18 @@ network_common.cpp      WiFi, MQTT client, HTTP server (Mongoose)
    spinlock-protected critical sections. Never access `evse_ctx_t` fields from
    outside the bridge without synchronization.
 
-5. **Platform guards.** Use `#ifdef SMARTEVSE_VERSION` (30 or 40) only in the bridge
-   and glue layers, never in `evse_state_machine.c` or parser modules.
+5. **Platform guards.** The tree targets SmartEVSE v3 (ESP32) only — `SMARTEVSE_VERSION`
+   is always 30. Do not reintroduce version guards; keep platform-specific code in the
+   bridge and glue layers, never in `evse_state_machine.c` or parser modules.
 
 ### Memory Budget
 
 | Target | Flash budget | RAM budget | Current |
 |--------|-------------|-----------|---------|
 | ESP32  | 95% (1,640KB) | 90% (288KB) | ~84% / ~21% |
-| CH32   | 95% (61KB)   | 90% (18KB)  | ~59% / ~19% |
 
-Before merging, verify: `pio run -e release -d SmartEVSE-3/` and
-`pio run -e ch32 -d SmartEVSE-3/` both compile within budget. CI enforces this.
+Before merging, verify: `pio run -e release -d SmartEVSE-3/` compiles within
+budget. CI enforces this.
 
 ## Coding Conventions
 
@@ -216,8 +216,6 @@ cppcheck --enable=warning,style,performance \
 # Build ESP32 firmware
 pio run -e release -d SmartEVSE-3/
 
-# Build CH32 firmware
-pio run -e ch32 -d SmartEVSE-3/
 
 # Regenerate test specification
 cd SmartEVSE-3/test/native && python3 scripts/extract_traceability.py \
@@ -266,11 +264,9 @@ cppcheck --enable=warning,style,performance \
   SmartEVSE-3/src/diag_modbus.c \
   SmartEVSE-3/src/capacity_peak.c
 
-# 4. ESP32 firmware build
+# 4. ESP32 firmware build (final step)
 pio run -e release -d SmartEVSE-3/
 
-# 5. CH32 firmware build
-pio run -e ch32 -d SmartEVSE-3/
 ```
 
 Do not skip any step. Do not assume "tests pass, so it's fine."
@@ -280,7 +276,7 @@ Do not skip any step. Do not assume "tests pass, so it's fine."
   problems that compilers miss. This mirrors the CI `static-analysis` job.
   Install cppcheck locally: `brew install cppcheck` (macOS) or
   `apt install cppcheck` (Linux).
-- **Steps 4-5** catch type mismatches, missing symbols, and Arduino/ESP-IDF
+- **Step 4** catches type mismatches, missing symbols, and Arduino/ESP-IDF
   API misuse that native tests cannot reach.
 
 Skipping steps has caused CI failures on PRs that were trivially preventable.
@@ -470,7 +466,6 @@ The Quality Guardian agent does NOT write implementation code. Its responsibilit
 3. **Run the firmware build** to verify compilation:
    ```bash
    pio run -e release -d SmartEVSE-3/
-   pio run -e ch32 -d SmartEVSE-3/
    ```
 
 4. **Regenerate and verify traceability**:
@@ -554,7 +549,7 @@ Each plan increment becomes a GitHub Issue:
 2. SPEC    — Write Given/When/Then scenarios → move issue to "Spec & Test"
 3. TEST    — Write failing tests in test/native/tests/
 4. CODE    — Implement until tests pass
-5. VERIFY  — make clean test + pio build checks (ESP32 + CH32)
+5. VERIFY  — make clean test + pio build check (ESP32)
 6. PR      — Create PR on basmeerman/SmartEVSE-3.5, linked to the issue
 7. REVIEW  — Quality Guardian reviews → move issue to "Review"
 8. MERGE   — If approved, merge and close issue → move to "Done"

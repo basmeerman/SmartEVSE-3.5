@@ -5,7 +5,6 @@
  * Provides auto-dump on error transitions.
  */
 
-#if defined(SMARTEVSE_VERSION)  /* ESP32 firmware only */
 
 #include "diag_storage.h"
 #include "diag_sampler.h"
@@ -328,4 +327,3 @@ int diag_storage_list_json(char *buf, size_t bufsz)
     return pos;
 }
 
-#endif /* SMARTEVSE_VERSION */

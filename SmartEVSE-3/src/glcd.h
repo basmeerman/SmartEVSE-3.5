@@ -40,10 +40,5 @@ extern void GLCD_init(void);
 extern bool GridRelayOpen;
 extern std::vector<uint8_t> createImageFromGLCDBuffer();
 
-#if SMARTEVSE_VERSION >= 40
-#include <SPI.h>
-extern void glcd_clrln(unsigned char ln, unsigned char data);
-extern SPIClass LCD_SPI2;
-#endif
 
 #endif // #ifndef __GLCD_H
