@@ -18,18 +18,18 @@
 #include "diag_sampler.h"
 #include "diag_storage.h"
 #include "capacity_peak.h"
+#include "http_auth.h"          // Plan 16 Phase 1 — HTTP auth decision (pure C)
+#include "pin_rate_limit.h"     // Plan 16 Phase 2 — brute-force limiter for /lcd-verify-password
 #include <LittleFS.h>
 
 //OCPP includes
-#if ENABLE_OCPP && defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
+#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
 #include <MicroOcpp.h>
 #include <MicroOcppMongooseClient.h>
 #include <MicroOcpp/Core/Configuration.h>
 #include "ocpp_logic.h"
-#include "http_auth.h"          // Plan 16 Phase 1 — HTTP auth decision (pure C)
-#include "pin_rate_limit.h"     // Plan 16 Phase 2 — brute-force limiter for /lcd-verify-password
 #include "ocpp_telemetry.h"
-#endif //ENABLE_OCPP
+#endif //SMARTEVSE_VERSION
 
 // Externs for globals not exposed via headers
 extern unsigned char RFID[8];
@@ -92,7 +92,7 @@ extern bool MQTTChangeOnly;
 extern uint16_t MQTTHeartbeat;
 #endif
 
-#if ENABLE_OCPP && defined(SMARTEVSE_VERSION)
+#if defined(SMARTEVSE_VERSION)
 extern MicroOcpp::MOcppMongooseClient *OcppWsClient;
 extern float OcppCurrentLimit;
 extern ocpp_telemetry_t OcppTelemetry;
@@ -377,7 +377,7 @@ bool handle_URI(struct mg_connection *c, struct mg_http_message *hm,  webServerR
         doc["mqtt"]["heartbeat"] = MQTTHeartbeat;
 #endif
 
-#if ENABLE_OCPP && defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
+#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
         doc["ocpp"]["mode"] = OcppMode ? "Enabled" : "Disabled";
         doc["ocpp"]["backend_url"] = OcppWsClient ? OcppWsClient->getBackendUrl() : "";
         doc["ocpp"]["cb_id"] = OcppWsClient ? OcppWsClient->getChargeBoxId() : "";
@@ -413,7 +413,7 @@ bool handle_URI(struct mg_connection *c, struct mg_http_message *hm,  webServerR
         doc["ocpp"]["smart_charging_active"] = (!LoadBl && OcppCurrentLimit >= 0.0f);
         doc["ocpp"]["current_limit_a"] = OcppCurrentLimit >= 0.0f ? OcppCurrentLimit : -1;
         doc["ocpp"]["lb_conflict"] = OcppTelemetry.lb_conflict;
-#endif //ENABLE_OCPP
+#endif //SMARTEVSE_VERSION
 
         doc["home_battery"]["current"] = homeBatteryCurrent;
         doc["home_battery"]["last_update"] = homeBatteryLastUpdate;
@@ -812,7 +812,7 @@ bool handle_URI(struct mg_connection *c, struct mg_http_message *hm,  webServerR
             }
         }
 
-#if ENABLE_OCPP && defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
+#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
         if(request->hasParam("ocpp_update")) {
             if (request->getParam("ocpp_update")->value().toInt() == 1) {
 
@@ -896,7 +896,7 @@ bool handle_URI(struct mg_connection *c, struct mg_http_message *hm,  webServerR
                 MicroOcpp::configuration_save();
             }
         }
-#endif //ENABLE_OCPP
+#endif //SMARTEVSE_VERSION
 
         String json;
         serializeJson(doc, json);

@@ -60,14 +60,14 @@ char RequiredEVCCID[32] = "";                                               // R
 #include "capacity_peak.h"
 
 //OCPP includes
-#if ENABLE_OCPP && defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
+#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
 #include <MicroOcpp.h>
 #include <MicroOcppMongooseClient.h>
 #include <MicroOcpp/Core/Configuration.h>
 #include <MicroOcpp/Core/Context.h>
 #include "ocpp_logic.h"
 #include "ocpp_telemetry.h"
-#endif //ENABLE_OCPP
+#endif //SMARTEVSE_VERSION
 
 #if SMARTEVSE_VERSION >= 40
 #include <esp_sleep.h>
@@ -176,7 +176,7 @@ struct SettingsCache {
     bool MQTTChangeOnly;
     uint16_t MQTTHeartbeat;
 #endif
-#if ENABLE_OCPP && defined(SMARTEVSE_VERSION)
+#if defined(SMARTEVSE_VERSION)
     uint8_t OcppMode;
 #endif
     uint8_t LedMode;
@@ -352,7 +352,7 @@ extern uint16_t firmwareUpdateTimer;
                                                                                 //                                              whether an update is necessary
 extern OneWire32& ds();
 
-#if ENABLE_OCPP && defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
+#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
 extern unsigned char OcppRfidUuid [7];
 extern size_t OcppRfidUuidLen;
 extern unsigned long OcppLastRfidUpdate;
@@ -378,7 +378,7 @@ extern MicroOcpp::TxNotification OcppTrackTxNotification;
 extern unsigned long OcppLastTxNotification;
 
 extern unsigned long OcppLastOcppResponse;
-#endif //ENABLE_OCPP
+#endif //SMARTEVSE_VERSION
 
 
 #if SMARTEVSE_VERSION >=30 && SMARTEVSE_VERSION < 40
@@ -457,7 +457,7 @@ void IRAM_ATTR onTimerA() {
 
 // --------------------------- END of ISR's -----------------------------------------------------
 
-#if ENABLE_OCPP && defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
+#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
 // Inverse function of SetCurrent (for monitoring and debugging purposes)
 uint16_t GetCurrent() {
     uint32_t DutyCycle = CurrentPWM;
@@ -472,7 +472,7 @@ uint16_t GetCurrent() {
         return 0; //constant +12V
     }
 }
-#endif //ENABLE_OCPP
+#endif //SMARTEVSE_VERSION
 
 
 #if SMARTEVSE_VERSION >=30 && SMARTEVSE_VERSION < 40
@@ -1090,10 +1090,10 @@ void SetupMQTTClient() {
     MQTTclient.announce("RFIDLastRead", "sensor", optional_payload);
     MQTTclient.announce("NrOfPhases", "sensor", optional_payload);
 
-#if ENABLE_OCPP && defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
+#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
     MQTTclient.announce("OCPP", "sensor", optional_payload);
     MQTTclient.announce("OCPPConnection", "sensor", optional_payload);
-#endif //ENABLE_OCPP
+#endif //SMARTEVSE_VERSION
 
     optional_payload = MQTTclient.jsna("state_topic", String(MQTTprefix + "/LEDColorOff")) + MQTTclient.jsna("command_topic", String(MQTTprefix + "/Set/ColorOff"));
     MQTTclient.announce("LED Color Off", "text", optional_payload);
@@ -1353,7 +1353,7 @@ void mqttPublishData() {
         }
         if (homeBatteryLastUpdate)
             mqtt_pub_int(MQTT_SLOT_HOME_BATTERY_CURRENT, "/HomeBatteryCurrent", homeBatteryCurrent, false, now_s);
-#if ENABLE_OCPP && defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
+#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
         mqtt_pub_str(MQTT_SLOT_OCPP, "/OCPP", OcppMode ? "Enabled" : "Disabled", true, now_s);
         mqtt_pub_str(MQTT_SLOT_OCPP_CONNECTION, "/OCPPConnection", (OcppWsClient && OcppWsClient->isConnected()) ? "Connected" : "Disconnected", false, now_s);
         mqtt_pub_str(MQTT_SLOT_OCPP_TX_ACTIVE, "/OCPPTxActive", OcppTelemetry.tx_active ? "true" : "false", false, now_s);
@@ -1368,7 +1368,7 @@ void mqttPublishData() {
         }
         mqtt_pub_str(MQTT_SLOT_OCPP_SMART_CHARGING, "/OCPPSmartCharging",
             OcppTelemetry.lb_conflict ? "Conflict" : (!LoadBl ? "Active" : "Inactive"), false, now_s);
-#endif //ENABLE_OCPP
+#endif //SMARTEVSE_VERSION
         { // LED color topics — build string in buffer
             char color_buf[16];
             snprintf(color_buf, sizeof(color_buf), "%u,%u,%u", ColorOff[0], ColorOff[1], ColorOff[2]);
@@ -1674,9 +1674,9 @@ void read_settings() {
         RotationInterval = preferences.getUShort("RotationIntvl", 0);
         IdleTimeout = preferences.getUShort("IdleTimeout", 60);
 
-#if ENABLE_OCPP && defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
+#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
         OcppMode = preferences.getUChar("OcppMode", OCPP_MODE);
-#endif //ENABLE_OCPP
+#endif //SMARTEVSE_VERSION
 
         LedMode = preferences.getUChar("LedMode", 0);
         AuthMode = preferences.getUChar("AuthMode", 0);   // Plan 16: default 0 (legacy) on upgrade
@@ -1749,7 +1749,7 @@ void read_settings() {
         settingsCache.MQTTChangeOnly = MQTTChangeOnly;
         settingsCache.MQTTHeartbeat = MQTTHeartbeat;
 #endif
-#if ENABLE_OCPP && defined(SMARTEVSE_VERSION)
+#if defined(SMARTEVSE_VERSION)
         settingsCache.OcppMode = OcppMode;
 #endif
         settingsCache.LedMode = LedMode;
@@ -1838,9 +1838,9 @@ void write_settings(void) {
     PREFS_PUT_USHORT_IF_CHANGED("MQTTHrtbt", MQTTHeartbeat, MQTTHeartbeat);
 #endif
 
-#if ENABLE_OCPP && defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
+#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
     PREFS_PUT_UCHAR_IF_CHANGED("OcppMode", OcppMode, OcppMode);
-#endif //ENABLE_OCPP
+#endif //SMARTEVSE_VERSION
 
     PREFS_PUT_UCHAR_IF_CHANGED("LedMode", LedMode, LedMode);
     PREFS_PUT_UCHAR_IF_CHANGED("AuthMode", AuthMode, AuthMode);
@@ -1995,7 +1995,7 @@ void DisconnectEvent(void){
 /*
  * OCPP-related function definitions
  */
-#if ENABLE_OCPP && defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
+#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
 
 void ocppUpdateRfidReading(const unsigned char *uuid, size_t uuidLen) {
     if (!uuid || uuidLen > sizeof(OcppRfidUuid)) {
@@ -2487,7 +2487,7 @@ void ocppLoop() {
     }
 
 }
-#endif //ENABLE_OCPP
+#endif //SMARTEVSE_VERSION
 
 
 #if SMARTEVSE_VERSION >=40
@@ -3088,7 +3088,7 @@ void loop() {
     }
 
     //OCPP lifecycle management
-#if ENABLE_OCPP && defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
+#if defined(SMARTEVSE_VERSION) //run OCPP only on ESP32
     if (OcppMode && !getOcppContext() && WiFi.isConnected()) {
         ocppInit();
     } else if (!OcppMode && getOcppContext()) {
@@ -3098,7 +3098,7 @@ void loop() {
     if (OcppMode && getOcppContext()) {
         ocppLoop();
     }
-#endif //ENABLE_OCPP
+#endif //SMARTEVSE_VERSION
 
 }
 #endif //ESP32
