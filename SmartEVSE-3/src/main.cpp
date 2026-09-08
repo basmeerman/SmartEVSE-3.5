@@ -1471,6 +1471,7 @@ void ModbusRequestLoop() {
                         case EM_ABB:
                         case EM_FINDER_7M:
                         case EM_SCHNEIDER:
+                        case EM_CHINT_1P:
                             updated = 0;
                             break;
                         default:

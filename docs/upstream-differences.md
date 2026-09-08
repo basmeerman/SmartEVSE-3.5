@@ -105,6 +105,7 @@ Background — community reports:
 | Improvement | Why | Details |
 |-------------|-----|---------|
 | Orno WE-517/516 meter support | Community-requested meters | [Features: Metering](features.md#metering--modbus) |
+| Chint DDSU666 at meter slot 20 | **Meter type ID divergence.** Upstream `f92dce8` placed its Chint DDSU666 (single phase) at `EMConfig[]` slot 17 and renamed slot 15 to `EM_CHINT_3P`. This fork has used slots 17 and 18 for `EM_ORNO3P` / `EM_ORNO1P` since Plan 05, and the meter type is persisted in NVS and exposed over MQTT and `/settings`. Reusing 17 would silently reinterpret an existing Orno configuration as a Chint one — wrong register map, wrong readings. The fork therefore appends `EM_CHINT_1P` at slot 20. **Consequence: meter type numbers 17, 18 and 20 mean different things in the two firmwares; cross-flashing rewrites the configured meter.** | upstream `f92dce8` |
 | Modbus broadcast timeout handling | Timeout on a broadcast address would advance the request loop and skip the next legitimate slave response — integrated upstream `b104576` (1-line guard) | upstream `b104576` |
 | Pure C Modbus frame decoder | Modbus logic untestable | [Features: Metering](features.md#metering--modbus) |
 | Pure C meter byte decoder | 30 test scenarios for all endianness/data types | [Features: Metering](features.md#metering--modbus) |
@@ -160,7 +161,7 @@ Background — community reports:
 |---------|---------|---------|
 | Subpanel breaker protection | Limits EV charging to stay within breaker rating | [Features: CircuitMeter](features.md#circuitmeter--subpanel-metering) |
 | ERE 2027 compliance support | Circuit-level energy measurement for Dutch ERE Path B | [Features: CircuitMeter](features.md#circuitmeter--subpanel-metering) |
-| Reuses existing Meter class | Supports all 19 meter types with zero new meter code | [Features: CircuitMeter](features.md#circuitmeter--subpanel-metering) |
+| Reuses existing Meter class | Supports all 20 meter types with zero new meter code | [Features: CircuitMeter](features.md#circuitmeter--subpanel-metering) |
 | MQTT + HA auto-discovery | Circuit current, power, energy, and MaxCircuitMains | [Features: CircuitMeter](features.md#circuitmeter--subpanel-metering) |
 
 ### SoC Injection via MQTT (New in Fork)
