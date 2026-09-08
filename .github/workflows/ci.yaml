@@ -99,6 +99,30 @@ jobs:
           restore-keys: ${{ runner.os }}-pio-
       - name: Install PlatformIO
         run: pip install --upgrade platformio
+      - name: COMPAT #169 — assert 8KB mbedtls TLS context
+        # The prebuilt custom mbedtls lib (libmbedtls_2.a) ships with a reduced
+        # TLS context to save RAM. A 6KB context is too small for some CSMS
+        # certificate chains (e.g. Tap Electric), so wss:// OCPP handshakes fail
+        # while ws:// works — issue #169. Upstream a310e9e/be30619 raised the
+        # context to 8KB in / 4KB out. This step pins that binary by hash so a
+        # future framework refresh or accidental swap can't silently regress
+        # back to the small context. Update EXPECT_MD5 only with a deliberate,
+        # hardware-verified mbedtls rebuild.
+        run: |
+          set -e
+          LIB=SmartEVSE-3/custom_libs/esp32/libmbedtls_2.a
+          EXPECT_MD5=09dd4dd3fa86402328350bbd018cd8b3
+          if ! grep -q "max context size of 8Kb" SmartEVSE-3/replace_mbedtls.py; then
+            echo "ERROR: replace_mbedtls.py no longer declares an 8Kb context."
+            exit 1
+          fi
+          ACTUAL_MD5=$(md5sum "$LIB" | awk '{print $1}')
+          if [ "$ACTUAL_MD5" != "$EXPECT_MD5" ]; then
+            echo "ERROR: $LIB hash $ACTUAL_MD5 != expected 8KB-context $EXPECT_MD5."
+            echo "This likely reverts the wss:// OCPP fix for issue #169."
+            exit 1
+          fi
+          echo "OK: 8KB-context mbedtls binary present ($ACTUAL_MD5)."
       - name: Build ESP32 release
         run: |
           set -o pipefail
