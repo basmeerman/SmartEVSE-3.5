@@ -128,8 +128,14 @@ jobs:
       - name: Collect normal build artifacts
         run: mv ./SmartEVSE-3/.pio/build/release/*.bin ./SmartEVSE-3/distribution
       - name: Build debug version
+        # Build the debug ENVIRONMENT, not the release one with -DDBG=1 bolted
+        # on. [env:debug] is where the Mongoose and MicroOcpp diagnostics live
+        # (MG_ENABLE_LOG, MO_DBG_LEVEL, MO_CUSTOM_CONSOLE); building `pio run`
+        # without -e picks default_envs=release, so the shipped "debug"
+        # firmware silently had none of them — the one thing a debug build
+        # exists to provide.
         run: |
-          PLATFORMIO_BUILD_FLAGS='-DVERSION=\"${{ steps.version.outputs.version }}\" -DDBG=1' pio run -d SmartEVSE-3/
+          PLATFORMIO_BUILD_FLAGS='-DVERSION=\"${{ steps.version.outputs.version }}\"' pio run -e debug -d SmartEVSE-3/
       - name: Sign debug version
         env:
           super_secret: ${{ secrets.SECRET_RSA_KEY }}
@@ -140,14 +146,14 @@ jobs:
           fi
           secret_file=$(mktemp)
           echo "$super_secret" > "$secret_file"
-          openssl dgst -sign "$secret_file" -keyform PEM -sha256 -out firmware.sign -binary ./SmartEVSE-3/.pio/build/release/firmware.bin
-          cat firmware.sign ./SmartEVSE-3/.pio/build/release/firmware.bin > ./SmartEVSE-3/.pio/build/release/firmware.signed.bin
+          openssl dgst -sign "$secret_file" -keyform PEM -sha256 -out firmware.sign -binary ./SmartEVSE-3/.pio/build/debug/firmware.bin
+          cat firmware.sign ./SmartEVSE-3/.pio/build/debug/firmware.bin > ./SmartEVSE-3/.pio/build/debug/firmware.signed.bin
           rm -f "$secret_file"
       - name: Collect debug build artifacts
         run: |
-          mv ./SmartEVSE-3/.pio/build/release/firmware.bin ./SmartEVSE-3/distribution/firmware.debug.bin
-          if [ -f ./SmartEVSE-3/.pio/build/release/firmware.signed.bin ]; then
-            mv ./SmartEVSE-3/.pio/build/release/firmware.signed.bin ./SmartEVSE-3/distribution/firmware.debug.signed.bin
+          mv ./SmartEVSE-3/.pio/build/debug/firmware.bin ./SmartEVSE-3/distribution/firmware.debug.bin
+          if [ -f ./SmartEVSE-3/.pio/build/debug/firmware.signed.bin ]; then
+            mv ./SmartEVSE-3/.pio/build/debug/firmware.signed.bin ./SmartEVSE-3/distribution/firmware.debug.signed.bin
           fi
           cp -a ./SmartEVSE-3/HowToFlash.txt ./SmartEVSE-3/distribution
 

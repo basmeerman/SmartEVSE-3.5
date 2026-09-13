@@ -69,14 +69,16 @@ jobs:
           fi
 
       - name: Build debug firmware
+        # Same reason as pio-build.yaml: [env:debug] carries the Mongoose and
+        # MicroOcpp diagnostics, and `pio run` without -e builds release.
         run: |
-          PLATFORMIO_BUILD_FLAGS='-DVERSION=\"nightly-${{ steps.sha.outputs.short }}\" -DDBG=1' pio run -d SmartEVSE-3/
+          PLATFORMIO_BUILD_FLAGS='-DVERSION=\"nightly-${{ steps.sha.outputs.short }}\"' pio run -e debug -d SmartEVSE-3/
 
       - name: Sign debug firmware
         env:
           super_secret: ${{ secrets.SECRET_RSA_KEY }}
         run: |
-          cp ./SmartEVSE-3/.pio/build/release/firmware.bin ./dist/firmware.debug.bin
+          cp ./SmartEVSE-3/.pio/build/debug/firmware.bin ./dist/firmware.debug.bin
           if [ -z "$super_secret" ]; then
             echo "Signing key not available — unsigned firmware only"
           else
