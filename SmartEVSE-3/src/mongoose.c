@@ -13379,19 +13379,29 @@ void mg_tls_init(struct mg_connection *c, const struct mg_tls_opts *opts) {
   }
   mbedtls_ssl_conf_rng(&tls->conf, mg_mbed_rng, c);
 
+  // SMARTEVSE LOCAL PATCH (see docs/upstream-differences.md): send SNI even when
+  // certificate verification is disabled. Upstream Mongoose sets the hostname
+  // only on the verifying path, because it thinks of it purely as "hostname
+  // verification". But SNI is also how a shared frontend picks which
+  // certificate to present, so omitting it is not merely lax, it is
+  // unroutable: ocpp.road.io sits behind Cloudflare and answers a ClientHello
+  // with no SNI with handshake_failure (alert 40), which is why wss:// backend
+  // URLs could not connect at all. Re-apply this when updating mongoose.c.
+  if (c->is_client && opts->name.buf != NULL && opts->name.buf[0] != '\0') {
+    char *host = mg_mprintf("%.*s", opts->name.len, opts->name.buf);
+    mbedtls_ssl_set_hostname(&tls->ssl, host);
+    MG_DEBUG(("%lu SNI/hostname: %s", c->id, host));
+    free(host);
+  }
+
   if (opts->ca.len == 0 || mg_strcmp(opts->ca, mg_str("*")) == 0) {
     // NOTE: MBEDTLS_SSL_VERIFY_NONE is not supported for TLS1.3 on client side
     // See https://github.com/Mbed-TLS/mbedtls/issues/7075
+    // (not reachable here: the ESP-IDF 4.4 mbedTLS is 2.28.x, TLS 1.2 max)
     mbedtls_ssl_conf_authmode(&tls->conf, MBEDTLS_SSL_VERIFY_NONE);
   } else {
     if (mg_load_cert(opts->ca, &tls->ca) == false) goto fail;
     mbedtls_ssl_conf_ca_chain(&tls->conf, &tls->ca, NULL);
-    if (c->is_client && opts->name.buf != NULL && opts->name.buf[0] != '\0') {
-      char *host = mg_mprintf("%.*s", opts->name.len, opts->name.buf);
-      mbedtls_ssl_set_hostname(&tls->ssl, host);
-      MG_DEBUG(("%lu hostname verification: %s", c->id, host));
-      free(host);
-    }
     mbedtls_ssl_conf_authmode(&tls->conf, MBEDTLS_SSL_VERIFY_REQUIRED);
   }
   if (!mg_load_cert(opts->cert, &tls->cert)) goto fail;
