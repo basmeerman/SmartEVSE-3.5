@@ -45,7 +45,7 @@ TEST_SRCS := $(wildcard $(TEST_DIR)/test_*.c)
 TEST_BINS := $(patsubst $(TEST_DIR)/%.c,$(BUILD)/%,$(TEST_SRCS))
 TEST_NAMES := $(patsubst $(TEST_DIR)/test_%.c,%,$(TEST_SRCS))
 
-.PHONY: all test clean help $(TEST_NAMES)
+.PHONY: all test clean help lint-ui-visibility check-mongoose-patches $(TEST_NAMES)
 
 all: $(TEST_BINS)
 
@@ -193,6 +193,13 @@ $(TEST_NAMES): %: $(BUILD)/test_%
 # showById() in app.js → element permanently invisible to users.
 lint-ui-visibility:
 	@python3 scripts/lint_ui_visibility.py
+
+# Assert local patches to the vendored src/mongoose.c are still present. The
+# amalgamation is not a managed dependency, so a newer drop-in silently reverts
+# them — and the SNI patch reverting means every wss:// OCPP backend stops
+# connecting, with no log line to say why.
+check-mongoose-patches:
+	@python3 scripts/check_mongoose_patches.py
 
 clean:
 	rm -rf $(BUILD)

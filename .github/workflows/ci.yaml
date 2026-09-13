@@ -53,6 +53,9 @@ jobs:
       - name: UI visibility lint (Plan 07 — show/hide symmetry)
         run: make lint-ui-visibility
         working-directory: SmartEVSE-3/test/native
+      - name: Vendored Mongoose local patches still applied
+        run: make check-mongoose-patches
+        working-directory: SmartEVSE-3/test/native
 
   memory-sanitizers:
     runs-on: ubuntu-latest
