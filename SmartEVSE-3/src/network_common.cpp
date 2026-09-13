@@ -77,6 +77,17 @@ static diag_snapshot_t diagSnapBuf;          // shared buffer: timer-ISR → Mon
 static mg_timer *diagWsTimer = nullptr;
 // END PLAN-06
 
+#if MG_ENABLE_LOG
+// Mongoose emits its log one character at a time. By default that goes to
+// putchar(), i.e. the USB serial port — not the telnet console where anyone
+// debugging a backend connection is actually looking. Forward it to the same
+// place as _LOG_*. Debug builds only; see platformio.ini.
+static void mongoose_log_out(char ch, void *param) {
+    (void) param;
+    _LOG_A_NO_FUNC("%c", ch);
+}
+#endif
+
 static void stopLCDImageTimer(struct mg_mgr *manager) {
     if (LCDImageTimer != nullptr && manager != nullptr) {
         mg_timer_free(&manager->timers, LCDImageTimer);
@@ -2020,8 +2031,18 @@ void onWifiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
                 esp_mqtt_client_start(MQTTclientSmartEVSE.client);
 #endif
 #endif //MQTT
+#if MG_ENABLE_LOG
+            // Debug builds only. Mongoose writes to putchar() by default, which
+            // on this board is the USB serial port — not where someone
+            // debugging a backend connection over telnet is looking. Route it
+            // to the same console as _LOG_*. MG_LL_ERROR is enough to surface a
+            // failed TLS handshake or a refused WebSocket upgrade; anything
+            // more floods the console with per-poll lines.
+            mg_log_set_fn(mongoose_log_out, NULL);
+            mg_log_set(MG_LL_ERROR);
+#else
             mg_log_set(MG_LL_NONE);
-            //mg_log_set(MG_LL_VERBOSE);
+#endif
 
             if (!HttpListener80) {
                 HttpListener80 = mg_http_listen(&mgr, "http://0.0.0.0:80", fn_http_server, NULL);  // Setup listener

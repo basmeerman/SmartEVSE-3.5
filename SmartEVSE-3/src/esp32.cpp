@@ -1700,9 +1700,24 @@ static const char *ocppMeterSerialToReport(void) {
     return serial;
 }
 
+#ifdef MO_CUSTOM_CONSOLE
+// MicroOcpp logs to the USB serial port by default. Send it to the telnet
+// console instead, so an OCPP or TLS failure is visible in the same place as
+// everything else. Debug builds only; see platformio.ini.
+static void ocpp_console_out(const char *msg) {
+    if (msg) {
+        _LOG_A_NO_FUNC("%s", msg);
+    }
+}
+#endif
+
 void ocppInit() {
 
     ocpp_telemetry_init(&OcppTelemetry);
+
+#ifdef MO_CUSTOM_CONSOLE
+    mocpp_set_console_out(ocpp_console_out);
+#endif
 
     //load OCPP library modules: Mongoose WS adapter and Core OCPP library
 
