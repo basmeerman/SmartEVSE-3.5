@@ -174,25 +174,55 @@ button.onclick = function(ev) {
 
 // Send a large blob of data chunk by chunk
 var sendFileData = function(name, data, chunkSize) {
+  // Two things here are load-bearing, both learned the hard way.
+  //
+  // 1. Nothing is announced, and the page does not navigate, until the charger
+  //    has answered the FINAL chunk. That last response is the only one that
+  //    carries the verdict: the signature is checked and the boot partition
+  //    switched while serving it. The old code claimed success and navigated
+  //    away before sending it, so a rejected image looked exactly like an
+  //    accepted one and the error text was displayed to a page that no longer
+  //    existed.
+  //
+  // 2. The upload stops at the last chunk that carries data. The old code kept
+  //    recursing and sent one more POST with an empty body at offset == size.
+  //    The charger reads offset + 0 >= size as end-of-file a second time,
+  //    which used to erase the freshly verified image and revert to the old
+  //    firmware. The charger now guards against that too (ota_upload.h), but
+  //    there is no reason to send the request in the first place.
   var sendChunk = function(offset) {
     var chunk = data.subarray(offset, offset + chunkSize) || '';
+    var isLast = (offset + chunk.length >= data.length);
     var opts = {method: 'POST', body: chunk};
     var url = '/update?offset=' + offset + '&file=' + encodeURIComponent(name) + '&size=' + data.length;
     var ok;
-    if (offset + chunk.length == data.length) {
-        setStatus('Upload of ' + name + ' finished, will reboot. You can close this page.');
-        window.location.href = "/";
-    }
-    else
-        setStatus('Uploading ' + name + ', bytes ' + offset + '..' + (offset + chunk.length) + ' of ' + data.length);
+    setStatus(isLast
+        ? 'Verifying ' + name + ' on the charger, do not close this page...'
+        : 'Uploading ' + name + ', bytes ' + offset + '..' + (offset + chunk.length) + ' of ' + data.length);
     fetch(url, opts)
         .then(function(res) {
-          if (res.ok && chunk.length > 0) sendChunk(offset + chunk.length);
           ok = res.ok;
           return res.text();
         })
         .then(function(text) {
-          if (!ok) setStatus('Error: ' + text);
+          if (!ok) {
+            setStatus('Update failed: ' + (text || 'the charger rejected the upload') +
+                      ' — the existing firmware is unchanged.');
+            return;
+          }
+          if (!isLast) {
+            sendChunk(offset + chunk.length);
+            return;
+          }
+          setStatus('Upload of ' + name + ' accepted and verified. The charger will ' +
+                    'reboot as soon as no EV is connected.');
+          setTimeout(function() { window.location.href = "/"; }, 4000);
+        })
+        .catch(function(err) {
+          // A dropped connection on the final chunk is the ambiguous case: the
+          // charger may or may not have committed. Say so rather than guess.
+          setStatus('Update interrupted (' + err + '). Reload this page and check ' +
+                    'the reported firmware version before retrying.');
         });
   };
   sendChunk(0);
