@@ -252,6 +252,18 @@ passwords, auth keys, or WiFi credentials (these are explicitly
 redacted in firmware), but your MQTT topic structure, IP addresses,
 and behaviour patterns are visible.
 
+RFID card UIDs are redacted to a four-character fingerprint
+(`04ac...`) wherever they are logged — card read, store, delete,
+`Set/RFID` over MQTT, and an uploaded `rfid.txt`. A UID is the whole
+of what authorizes a charge, so a full one in a log is a card anyone
+reading that log can clone; the fingerprint is still enough to tell
+your own cards apart while debugging. The telnet port itself is
+unauthenticated and LAN-side, and debug builds print at every level,
+so this matters even before a log is shared. Note that the UID is
+still published in full on the MQTT `/RFIDLastRead` topic and sent as
+the OCPP idTag — both are the feature working as intended, not log
+output, and both are covered by §9.
+
 ### /settings JSON
 
 Safe to share. Passwords (MQTT, WiFi, OCPP auth_key) are all redacted

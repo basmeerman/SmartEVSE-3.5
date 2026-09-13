@@ -12,6 +12,7 @@
 #include "esp32.h"
 #include "http_api.h"
 #include "http_auth.h"
+#include "rfid_redact.h"
 #include "reconnect_backoff.h"
 #include <ArduinoJson.h>
 
@@ -1803,7 +1804,9 @@ static void fn_http_server(struct mg_connection *c, int ev, void *ev_data) {
                                 r = sscanf(RFIDtxtstring,"%02x%02x%02x%02x%02x%02x%02x", &RFID_UID[0], &RFID_UID[1], &RFID_UID[2], &RFID_UID[3], &RFID_UID[4], &RFID_UID[5], &RFID_UID[6]);
                                 RFID_UID[7]=crc8((unsigned char *) RFID_UID,7);
                                 if (r == 7) {
-                                    _LOG_A("Store RFID_UID %02x%02x%02x%02x%02x%02x%02x, crc=%02x.\n", RFID_UID[0], RFID_UID[1], RFID_UID[2], RFID_UID[3], RFID_UID[4], RFID_UID[5], RFID_UID[6], RFID_UID[7]);
+                                    char fp[RFID_FINGERPRINT_MAX];
+                                    rfid_fingerprint_hex(RFIDtxtstring, fp, sizeof(fp));
+                                    _LOG_A("Store 7-byte RFID_UID %s.\n", fp);  // fingerprint only, see rfid_redact.h
                                     LoadandStoreRFID(RFID_UID);
                                 } else {
                                     strncpy(RFIDtxtstring, hm->body.buf + beginpos, 17);         // in case of DOS the 0x0D is stripped off here
@@ -1812,7 +1815,9 @@ static void fn_http_server(struct mg_connection *c, int ev, void *ev_data) {
                                     r = sscanf(RFIDtxtstring,"%02x%02x%02x%02x%02x%02x", &RFID_UID[1], &RFID_UID[2], &RFID_UID[3], &RFID_UID[4], &RFID_UID[5], &RFID_UID[6]);
                                     RFID_UID[7]=crc8((unsigned char *) RFID_UID,7);
                                     if (r == 6) {
-                                        _LOG_A("Store RFID_UID %02x%02x%02x%02x%02x%02x, crc=%02x.\n", RFID_UID[1], RFID_UID[2], RFID_UID[3], RFID_UID[4], RFID_UID[5], RFID_UID[6], RFID_UID[7]);
+                                        char fp[RFID_FINGERPRINT_MAX];
+                                        rfid_fingerprint_hex(RFIDtxtstring, fp, sizeof(fp));
+                                        _LOG_A("Store 6-byte RFID_UID %s.\n", fp);
                                         LoadandStoreRFID(RFID_UID);
                                     }
                                 }
