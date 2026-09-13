@@ -39,6 +39,7 @@ CAPACITY_PEAK_SRC   := $(SRC_DIR)/capacity_peak.c
 FW_VERSION_SRC      := $(SRC_DIR)/fw_version.c
 NVS_SHADOW_SRC      := $(SRC_DIR)/nvs_shadow.c
 RFID_REDACT_SRC     := $(SRC_DIR)/rfid_redact.c
+OTA_UPLOAD_SRC      := $(SRC_DIR)/ota_upload.c
 
 # Discover all test files
 TEST_SRCS := $(wildcard $(TEST_DIR)/test_*.c)
@@ -145,6 +146,9 @@ $(BUILD)/test_nvs_shadow: $(TEST_DIR)/test_nvs_shadow.c $(NVS_SHADOW_SRC) $(SRC_
 
 $(BUILD)/test_rfid_redact: $(TEST_DIR)/test_rfid_redact.c $(RFID_REDACT_SRC) $(SRC_DIR)/rfid_redact.h include/*.h | $(BUILD)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(TEST_DIR)/test_rfid_redact.c $(RFID_REDACT_SRC)
+
+$(BUILD)/test_ota_upload: $(TEST_DIR)/test_ota_upload.c $(OTA_UPLOAD_SRC) $(SRC_DIR)/ota_upload.h include/*.h | $(BUILD)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(TEST_DIR)/test_ota_upload.c $(OTA_UPLOAD_SRC)
 
 $(BUILD)/test_api_staleness: $(TEST_DIR)/test_api_staleness.c $(EVSE_SRC) $(MQTT_PARSER_SRC) $(SRC_DIR)/evse_ctx.h $(SRC_DIR)/mqtt_parser.h include/*.h | $(BUILD)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(TEST_DIR)/test_api_staleness.c $(EVSE_SRC) $(MQTT_PARSER_SRC)

@@ -13,6 +13,7 @@
 #include "http_api.h"
 #include "http_auth.h"
 #include "rfid_redact.h"
+#include "ota_upload.h"
 #include "reconnect_backoff.h"
 #include <ArduinoJson.h>
 
@@ -1638,6 +1639,11 @@ static void fn_http_server(struct mg_connection *c, int ev, void *ev_data) {
             serializeJson(doc, json);
             mg_http_reply(c, 200, "Content-Type: application/json\r\n", "%s\n", json.c_str());    // Yes. Respond JSON
         } else if (mg_http_match_uri(hm, "/update")) {
+            // Tracks how far this upload has got, so the end-of-file work is
+            // done exactly once. Reaching the end twice used to erase the image
+            // that had just been written and verified — see ota_upload.h.
+            static ota_upload_t ota_state;
+
             if (!require_auth(c, hm)) return;  // Plan 16 — auth gate
             //modified version of mg_http_upload
             char buf[20] = "0", file[40];
@@ -1665,6 +1671,9 @@ static void fn_http_server(struct mg_connection *c, int ev, void *ev_data) {
               mg_http_reply(c, 400, "", "size required");
               res = -5;
             } else {
+                if (!offset) {
+                    ota_upload_begin(&ota_state, size);   // a fresh upload clears any earlier finalize
+                }
                 // Unsigned firmware.bin / firmware.debug.bin uploads.
                 //
                 // C-1 removed this path wholesale because plain-HTTP LAN clients
@@ -1713,7 +1722,7 @@ static void fn_http_server(struct mg_connection *c, int ev, void *ev_data) {
                             _LOG_A("bytes written %lu\r", offset + hm->body.len);
                         }
                     }
-                    if (offset + hm->body.len >= size) {                     // EOF
+                    if (ota_upload_take_finalize(&ota_state, offset, (long) hm->body.len)) {   // EOF, first time only
                         if (Update.end(true)) {
                             _LOG_A("\nUnsigned update applied (debug build, PIN verified)\n");
                             shouldReboot = true;
@@ -1722,6 +1731,8 @@ static void fn_http_server(struct mg_connection *c, int ev, void *ev_data) {
                             Update.printError(Serial);
                             mg_http_reply(c, 400, "", "firmware.bin update failed!");
                         }
+                    } else if (ota_upload_is_finalized(&ota_state)) {
+                        _LOG_A("Ignoring extra POST after the upload already completed\n");
                     }
                 } else
                 if (!memcmp(file,"firmware.signed.bin", sizeof("firmware.signed.bin")) || !memcmp(file,"firmware.debug.signed.bin", sizeof("firmware.debug.signed.bin"))) {
@@ -1750,7 +1761,17 @@ static void fn_http_server(struct mg_connection *c, int ev, void *ev_data) {
                             _LOG_A("bytes written %lu\r", offset + hm->body.len);
                         }
                     }
-                    if (offset + hm->body.len >= size) {                                           //EOF
+                    if (ota_upload_is_finalized(&ota_state) &&
+                            ota_upload_is_last_chunk(&ota_state, offset, (long) hm->body.len)) {
+                        // The update page sends a trailing zero-length POST at
+                        // offset == size, and a browser may retry the last
+                        // chunk. Both re-enter this branch. Running it again
+                        // points the boot partition back at the running image
+                        // and erases the verified one, silently undoing a
+                        // successful update — so acknowledge and do nothing.
+                        _LOG_A("Ignoring extra POST after the update already completed\n");
+                        mg_http_reply(c, 200, "", "already completed");
+                    } else if (ota_upload_take_finalize(&ota_state, offset, (long) hm->body.len)) { //EOF, first time only
                         const esp_partition_t* target_partition = esp_ota_get_next_update_partition(NULL);              // the newly updated partition
                         if (!target_partition) {
                             _LOG_A("ERROR: Can't access firmware partition to check signature!");
