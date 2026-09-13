@@ -53,6 +53,7 @@
 #include <MicroOcpp/Core/Configuration.h>
 #include <MicroOcpp/Core/Context.h>
 #include "ocpp_logic.h"
+#include "rfid_redact.h"
 #include "ocpp_telemetry.h"
 
 
@@ -770,7 +771,7 @@ void mqtt_receive_callback(const String topic, const String payload) {
             }
 
             if (!validHex) {
-                _LOG_A("Invalid RFID hex string received via MQTT: %s\n", hexString.c_str());
+                _LOG_A("Invalid RFID hex string received via MQTT (%u chars)\n", (unsigned)hexString.length());
             } else if (hexString.length() == 12 || hexString.length() == 14) {
                 // Parse hex string into RFID array
                 memset(RFID, 0, 8);
@@ -790,7 +791,9 @@ void mqtt_receive_callback(const String topic, const String payload) {
                     RFID[7] = crc8((unsigned char *)RFID, 7);
                 }
 
-                _LOG_A("RFID received via MQTT: %s\n", hexString.c_str());
+                char fp[RFID_FINGERPRINT_MAX];
+                rfid_fingerprint_hex(hexString.c_str(), fp, sizeof(fp));
+                _LOG_A("RFID received via MQTT: %s\n", fp);                    // fingerprint only, see rfid_redact.h
 
                 // Reset RFIDstatus so CheckRFID processes the card as new
                 RFIDstatus = 0;
@@ -798,7 +801,7 @@ void mqtt_receive_callback(const String topic, const String payload) {
                 // Process RFID using existing logic (whitelist check, OCPP, etc.)
                 CheckRFID();
             } else {
-                _LOG_A("Invalid RFID length received via MQTT (expected 12 or 14 hex chars): %s\n", hexString.c_str());
+                _LOG_A("Invalid RFID length received via MQTT: %u chars, expected 12 or 14\n", (unsigned)hexString.length());
             }
         }
     }
@@ -1700,9 +1703,24 @@ static const char *ocppMeterSerialToReport(void) {
     return serial;
 }
 
+#ifdef MO_CUSTOM_CONSOLE
+// MicroOcpp logs to the USB serial port by default. Send it to the telnet
+// console instead, so an OCPP or TLS failure is visible in the same place as
+// everything else. Debug builds only; see platformio.ini.
+static void ocpp_console_out(const char *msg) {
+    if (msg) {
+        _LOG_A_NO_FUNC("%s", msg);
+    }
+}
+#endif
+
 void ocppInit() {
 
     ocpp_telemetry_init(&OcppTelemetry);
+
+#ifdef MO_CUSTOM_CONSOLE
+    mocpp_set_console_out(ocpp_console_out);
+#endif
 
     //load OCPP library modules: Mongoose WS adapter and Core OCPP library
 

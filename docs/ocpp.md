@@ -67,7 +67,7 @@ With a monthly list of transactions and a read-out of my (Inepro PRO380-Mod) kWh
 
 | Parameter | Description | Validation |
 |-----------|-------------|------------|
-| Backend URL | WebSocket endpoint for the OCPP backend | Must start with `ws://` or `wss://` |
+| Backend URL | WebSocket endpoint for the OCPP backend | Must start with `ws://` or `wss://`. Prefer `wss://` — the traffic is then encrypted, though the backend's certificate is not verified (see [security.md §12](security.md)) |
 | Charge Box ID | Identifier for this charge point | Max 20 characters, printable ASCII |
 | Password | WebSocket Basic Auth key | Max 40 characters (optional) |
 | Auto Authorize | Enable FreeVend (auto-start transactions) | On/Off |

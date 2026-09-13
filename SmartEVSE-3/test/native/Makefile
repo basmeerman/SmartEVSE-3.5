@@ -38,6 +38,7 @@ DIAG_MODBUS_SRC     := $(SRC_DIR)/diag_modbus.c
 CAPACITY_PEAK_SRC   := $(SRC_DIR)/capacity_peak.c
 FW_VERSION_SRC      := $(SRC_DIR)/fw_version.c
 NVS_SHADOW_SRC      := $(SRC_DIR)/nvs_shadow.c
+RFID_REDACT_SRC     := $(SRC_DIR)/rfid_redact.c
 OTA_UPLOAD_SRC      := $(SRC_DIR)/ota_upload.c
 
 # Discover all test files
@@ -45,7 +46,7 @@ TEST_SRCS := $(wildcard $(TEST_DIR)/test_*.c)
 TEST_BINS := $(patsubst $(TEST_DIR)/%.c,$(BUILD)/%,$(TEST_SRCS))
 TEST_NAMES := $(patsubst $(TEST_DIR)/test_%.c,%,$(TEST_SRCS))
 
-.PHONY: all test clean help $(TEST_NAMES)
+.PHONY: all test clean help lint-ui-visibility check-mongoose-patches $(TEST_NAMES)
 
 all: $(TEST_BINS)
 
@@ -143,6 +144,9 @@ $(BUILD)/test_fw_version: $(TEST_DIR)/test_fw_version.c $(FW_VERSION_SRC) $(SRC_
 $(BUILD)/test_nvs_shadow: $(TEST_DIR)/test_nvs_shadow.c $(NVS_SHADOW_SRC) $(SRC_DIR)/nvs_shadow.h include/*.h | $(BUILD)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(TEST_DIR)/test_nvs_shadow.c $(NVS_SHADOW_SRC)
 
+$(BUILD)/test_rfid_redact: $(TEST_DIR)/test_rfid_redact.c $(RFID_REDACT_SRC) $(SRC_DIR)/rfid_redact.h include/*.h | $(BUILD)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(TEST_DIR)/test_rfid_redact.c $(RFID_REDACT_SRC)
+
 $(BUILD)/test_ota_upload: $(TEST_DIR)/test_ota_upload.c $(OTA_UPLOAD_SRC) $(SRC_DIR)/ota_upload.h include/*.h | $(BUILD)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(TEST_DIR)/test_ota_upload.c $(OTA_UPLOAD_SRC)
 
@@ -193,6 +197,13 @@ $(TEST_NAMES): %: $(BUILD)/test_%
 # showById() in app.js → element permanently invisible to users.
 lint-ui-visibility:
 	@python3 scripts/lint_ui_visibility.py
+
+# Assert local patches to the vendored src/mongoose.c are still present. The
+# amalgamation is not a managed dependency, so a newer drop-in silently reverts
+# them — and the SNI patch reverting means every wss:// OCPP backend stops
+# connecting, with no log line to say why.
+check-mongoose-patches:
+	@python3 scripts/check_mongoose_patches.py
 
 clean:
 	rm -rf $(BUILD)

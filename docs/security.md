@@ -252,6 +252,18 @@ passwords, auth keys, or WiFi credentials (these are explicitly
 redacted in firmware), but your MQTT topic structure, IP addresses,
 and behaviour patterns are visible.
 
+RFID card UIDs are redacted to a four-character fingerprint
+(`04ac...`) wherever they are logged — card read, store, delete,
+`Set/RFID` over MQTT, and an uploaded `rfid.txt`. A UID is the whole
+of what authorizes a charge, so a full one in a log is a card anyone
+reading that log can clone; the fingerprint is still enough to tell
+your own cards apart while debugging. The telnet port itself is
+unauthenticated and LAN-side, and debug builds print at every level,
+so this matters even before a log is shared. Note that the UID is
+still published in full on the MQTT `/RFIDLastRead` topic and sent as
+the OCPP idTag — both are the feature working as intended, not log
+output, and both are covered by §9.
+
 ### /settings JSON
 
 Safe to share. Passwords (MQTT, WiFi, OCPP auth_key) are all redacted
@@ -308,6 +320,17 @@ that timer. Per-client sessions are deferred work, not a shipped feature.
 All three are confined to `AuthMode=1`, which is opt-in; at the default
 `AuthMode=0` the entire HTTP surface is open by design and none of them
 represents a boundary being crossed.
+
+**A `wss://` OCPP connection is encrypted but the backend is not
+authenticated.** The firmware configures no CA for the OCPP WebSocket, so
+mbedTLS runs with `MBEDTLS_SSL_VERIFY_NONE`: the traffic to your charge point
+operator is confidential and tamper-evident against a passive observer, but an
+attacker positioned to intercept the connection could present any certificate
+and read or alter the OCPP session, including the auth key in the handshake.
+This is a deliberate trade — pinning a CA makes the connection brittle when the
+operator rotates certificates, and the alternative on offer was `ws://`, which
+is plaintext. The charger does now send SNI, so `wss://` reaches endpoints
+behind a shared frontend; supplying a CA per backend is possible future work.
 
 ---
 

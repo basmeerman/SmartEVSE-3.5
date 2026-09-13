@@ -220,6 +220,20 @@ Findings from the security review (see internal report; most issues are inherite
 
 ---
 
+## Local patches to vendored third-party code
+
+`SmartEVSE-3/src/mongoose.c` is a vendored amalgamation, not a managed
+dependency, so patches to it are silently reverted by dropping in a newer
+copy. Each one is marked in the source with a `SMARTEVSE LOCAL PATCH`
+comment, and `make check-mongoose-patches` (run in CI) fails if one goes
+missing. Re-apply them after any Mongoose update.
+
+| Patch | Why |
+|---|---|
+| `mg_tls_init()` (mbedTLS backend) calls `mbedtls_ssl_set_hostname()` on both TLS paths, not only when a CA is configured | Upstream treats the hostname purely as something to *verify against*, so it is skipped when verification is off. But SNI is also how a shared frontend selects which certificate to present. `ocpp.road.io` (Cloudflare) answers a ClientHello with no SNI with `handshake_failure` (alert 40), so every `wss://` OCPP backend URL failed to connect. Worth offering upstream — it is a bug in Mongoose, not a fork preference |
+
+---
+
 ## Contributing changes to the reference codebase
 
 When porting a change to the reference codebase

@@ -214,6 +214,7 @@ cppcheck --enable=warning,style,performance \
   SmartEVSE-3/src/capacity_peak.c \
   SmartEVSE-3/src/fw_version.c \
   SmartEVSE-3/src/nvs_shadow.c \
+  SmartEVSE-3/src/rfid_redact.c \
   SmartEVSE-3/src/ota_upload.c
 
 # Build ESP32 firmware
@@ -268,6 +269,7 @@ cppcheck --enable=warning,style,performance \
   SmartEVSE-3/src/capacity_peak.c \
   SmartEVSE-3/src/fw_version.c \
   SmartEVSE-3/src/nvs_shadow.c \
+  SmartEVSE-3/src/rfid_redact.c \
   SmartEVSE-3/src/ota_upload.c
 
 # 4. ESP32 firmware build (final step)

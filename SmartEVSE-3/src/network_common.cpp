@@ -12,6 +12,7 @@
 #include "esp32.h"
 #include "http_api.h"
 #include "http_auth.h"
+#include "rfid_redact.h"
 #include "ota_upload.h"
 #include "reconnect_backoff.h"
 #include <ArduinoJson.h>
@@ -77,6 +78,17 @@ static volatile bool diagSnapPending = false;
 static diag_snapshot_t diagSnapBuf;          // shared buffer: timer-ISR → Mongoose thread
 static mg_timer *diagWsTimer = nullptr;
 // END PLAN-06
+
+#if MG_ENABLE_LOG
+// Mongoose emits its log one character at a time. By default that goes to
+// putchar(), i.e. the USB serial port — not the telnet console where anyone
+// debugging a backend connection is actually looking. Forward it to the same
+// place as _LOG_*. Debug builds only; see platformio.ini.
+static void mongoose_log_out(char ch, void *param) {
+    (void) param;
+    _LOG_A_NO_FUNC("%c", ch);
+}
+#endif
 
 static void stopLCDImageTimer(struct mg_mgr *manager) {
     if (LCDImageTimer != nullptr && manager != nullptr) {
@@ -1824,7 +1836,9 @@ static void fn_http_server(struct mg_connection *c, int ev, void *ev_data) {
                                 r = sscanf(RFIDtxtstring,"%02x%02x%02x%02x%02x%02x%02x", &RFID_UID[0], &RFID_UID[1], &RFID_UID[2], &RFID_UID[3], &RFID_UID[4], &RFID_UID[5], &RFID_UID[6]);
                                 RFID_UID[7]=crc8((unsigned char *) RFID_UID,7);
                                 if (r == 7) {
-                                    _LOG_A("Store RFID_UID %02x%02x%02x%02x%02x%02x%02x, crc=%02x.\n", RFID_UID[0], RFID_UID[1], RFID_UID[2], RFID_UID[3], RFID_UID[4], RFID_UID[5], RFID_UID[6], RFID_UID[7]);
+                                    char fp[RFID_FINGERPRINT_MAX];
+                                    rfid_fingerprint_hex(RFIDtxtstring, fp, sizeof(fp));
+                                    _LOG_A("Store 7-byte RFID_UID %s.\n", fp);  // fingerprint only, see rfid_redact.h
                                     LoadandStoreRFID(RFID_UID);
                                 } else {
                                     strncpy(RFIDtxtstring, hm->body.buf + beginpos, 17);         // in case of DOS the 0x0D is stripped off here
@@ -1833,7 +1847,9 @@ static void fn_http_server(struct mg_connection *c, int ev, void *ev_data) {
                                     r = sscanf(RFIDtxtstring,"%02x%02x%02x%02x%02x%02x", &RFID_UID[1], &RFID_UID[2], &RFID_UID[3], &RFID_UID[4], &RFID_UID[5], &RFID_UID[6]);
                                     RFID_UID[7]=crc8((unsigned char *) RFID_UID,7);
                                     if (r == 6) {
-                                        _LOG_A("Store RFID_UID %02x%02x%02x%02x%02x%02x, crc=%02x.\n", RFID_UID[1], RFID_UID[2], RFID_UID[3], RFID_UID[4], RFID_UID[5], RFID_UID[6], RFID_UID[7]);
+                                        char fp[RFID_FINGERPRINT_MAX];
+                                        rfid_fingerprint_hex(RFIDtxtstring, fp, sizeof(fp));
+                                        _LOG_A("Store 6-byte RFID_UID %s.\n", fp);
                                         LoadandStoreRFID(RFID_UID);
                                     }
                                 }
@@ -2041,8 +2057,18 @@ void onWifiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
                 esp_mqtt_client_start(MQTTclientSmartEVSE.client);
 #endif
 #endif //MQTT
+#if MG_ENABLE_LOG
+            // Debug builds only. Mongoose writes to putchar() by default, which
+            // on this board is the USB serial port — not where someone
+            // debugging a backend connection over telnet is looking. Route it
+            // to the same console as _LOG_*. MG_LL_ERROR is enough to surface a
+            // failed TLS handshake or a refused WebSocket upgrade; anything
+            // more floods the console with per-poll lines.
+            mg_log_set_fn(mongoose_log_out, NULL);
+            mg_log_set(MG_LL_ERROR);
+#else
             mg_log_set(MG_LL_NONE);
-            //mg_log_set(MG_LL_VERBOSE);
+#endif
 
             if (!HttpListener80) {
                 HttpListener80 = mg_http_listen(&mgr, "http://0.0.0.0:80", fn_http_server, NULL);  // Setup listener
