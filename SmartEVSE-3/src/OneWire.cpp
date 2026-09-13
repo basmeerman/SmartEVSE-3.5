@@ -32,6 +32,7 @@ unsigned char RFID[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 #include "esp32.h"
 #include "utils.h"
 #include "OneWire.h"
+#include "rfid_redact.h"
 #include "OneWireESP32.h"
 
 #define RFIDSIZE 700
@@ -65,16 +66,17 @@ unsigned char OneWireReadCardId(void) {
 
 #else //FAKE_RFID
 unsigned char OneWireReadCardId(void) {
-    uint8_t x;
-
     // Use ReadRom command (33)
     if (!ds().readRom(RFID)) {                                                    // read Family code (0x01) RFID ID (6 bytes) and crc8
         if (crc8(RFID,8)) {
             RFID[0] = 0;                                                        // CRC incorrect, clear first byte of RFID buffer
             return 0;
         } else {
-            for (x=0 ; x<7 ; x++) _LOG_A_NO_FUNC("%02x",RFID[x]);
-            _LOG_A_NO_FUNC("\r\n");
+            char fp[RFID_FINGERPRINT_MAX];
+            // Skip the 0x01 family code of an old 6-byte reader, so the same
+            // card fingerprints alike here, in StoreRFID and in DeleteRFID.
+            rfid_fingerprint(RFID[0] == 0x01 ? RFID + 1 : RFID, RFID[0] == 0x01 ? 6 : 7, fp, sizeof(fp));
+            _LOG_A_NO_FUNC("RFID card %s\r\n", fp);                          // fingerprint only, see rfid_redact.h
             return 1;
         }
     }
@@ -212,8 +214,9 @@ unsigned char StoreRFID(void) {
     }
 
 
-    _LOG_I("\nRFIDlist:");
-    for (r=0; r<RFIDSIZE; r++) _LOG_I_NO_FUNC("%02x",RFIDlist[r]);
+    char fp[RFID_FINGERPRINT_MAX];
+    rfid_fingerprint(RFIDlist + offset, 7, fp, sizeof(fp));
+    _LOG_I("stored RFID card %s in slot %u\n", fp, (unsigned)(offset / 7));    // never dump the whole list
 
     WriteRFIDlist();
     return 1;
@@ -237,8 +240,9 @@ unsigned char DeleteRFID(void) {
         for (r = 0; r < 7; r++) RFIDlist[offset + r] = 0xff;
     } else return 0;
 
-    _LOG_A("deleted %u ",offset);
-    for (r=0; r<RFIDSIZE; r++) _LOG_A_NO_FUNC("%02x",RFIDlist[r]);
+    char fp[RFID_FINGERPRINT_MAX];
+    rfid_fingerprint(RFID[0] == 0x01 ? RFID + 1 : RFID, RFID[0] == 0x01 ? 6 : 7, fp, sizeof(fp));
+    _LOG_A("deleted RFID card %s from slot %u\n", fp, (unsigned)(offset / 7));
     
     WriteRFIDlist();
     return 1;
