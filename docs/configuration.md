@@ -602,7 +602,8 @@ Valid topics you can publish to are:
                Example: "112233445566" (6 bytes) or "11223344556677" (7 bytes)
                This will simulate an RFID card swipe and start/stop a charging session using all existing RFID checks
                (whitelist verification, OCPP authorization, etc.)
-/Set/PrioStrategy       0=Modbus Address, 1=First Connected, 2=Last Connected (Master only)
+/Set/PrioStrategy       0 "ModbusAddr", 1 "FirstConn", 2 "LastConn" (Master only)
+                        You can send either the number or the string, SmartEVSE will accept both!
 /Set/RotationInterval   0=disabled, 30-1440 minutes (Master only)
 /Set/IdleTimeout        30-300 seconds (Master only)
 ```

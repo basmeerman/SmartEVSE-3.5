@@ -165,6 +165,14 @@ and [PR #338](https://github.com/dingo35/SmartEVSE-3.5/pull/338).
   HA auto-discovery (`state_class=total_increasing`).
 - **Metering diagnostic counters** — `MeterTimeoutCount`, `MeterRecoveryCount`,
   `ApiStaleCount` published as HA diagnostic entities.
+- **Consistent select entities** — the options, published state and accepted
+  commands of every HA select come from one table and are checked against each
+  other by native tests. Priority Strategy shows the strategy name and accepts it
+  as a command. Entities whose state is only published under a condition
+  (Priority Strategy, Rotation Interval, Idle Timeout on the load balancing
+  Master; Cable Lock when a lock actuator is configured) are only announced
+  under that condition, and removed again when it no longer holds.
+  ([#193](https://github.com/basmeerman/SmartEVSE-3.5/issues/193))
 
 Configuration: [MQTT & Home Assistant](mqtt-home-assistant.md)
 

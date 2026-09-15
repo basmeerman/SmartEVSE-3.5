@@ -145,6 +145,62 @@ void mqtt_cache_force_all(mqtt_cache_t *cache);
 /* CRC16-CCITT (polynomial 0x1021) — no lookup table. */
 uint16_t mqtt_crc16(const char *data, size_t len);
 
+/* ---- Home Assistant select entities (issue #193) ----
+ *
+ * One table drives the announced options, the published state and (through
+ * the mqtt_parser string tables) the accepted commands, so the three cannot
+ * drift apart. Home Assistant rejects a state that is not an option.
+ */
+
+/* Condition under which an entity's state is published, and so announced. */
+typedef enum {
+    MQTT_HA_GATE_ALWAYS = 0,    /* every node */
+    MQTT_HA_GATE_MASTER,        /* load balancing Master only (LoadBl == 1) */
+    MQTT_HA_GATE_CABLE_LOCK,    /* a lock actuator is configured (Lock != 0) */
+    MQTT_HA_GATE_COUNT
+} mqtt_ha_gate_t;
+
+typedef enum {
+    MQTT_HA_SELECT_CUSTOM_BUTTON = 0,
+    MQTT_HA_SELECT_MODE,
+    MQTT_HA_SELECT_ENABLE_C2,
+    MQTT_HA_SELECT_CABLE_LOCK,
+    MQTT_HA_SELECT_PRIO_STRATEGY,
+    MQTT_HA_SELECT_COUNT
+} mqtt_ha_select_t;
+
+typedef struct {
+    const char *name;            /* HA entity name, e.g. "Priority Strategy" */
+    const char *topic;           /* state topic suffix, e.g. "/PrioStrategy" */
+    const char *command_topic;   /* command topic suffix, e.g. "/Set/PrioStrategy" */
+    const char *const *options;
+    uint8_t option_count;
+    mqtt_ha_gate_t gate;
+} mqtt_ha_select_def_t;
+
+extern const mqtt_ha_select_def_t mqtt_ha_selects[MQTT_HA_SELECT_COUNT];
+
+/* True when entities with this gate are published for the given settings. */
+bool mqtt_ha_gate_open(mqtt_ha_gate_t gate, uint8_t load_bl, uint8_t lock);
+
+/* One bit per open gate; a change means discovery must be refreshed. */
+uint8_t mqtt_ha_gate_mask(uint8_t load_bl, uint8_t lock);
+
+/* Buffer size that holds the options fragment of every select in the table. */
+#define MQTT_HA_OPTIONS_JSON_MAX 128
+
+/* Write `, "options" : ["a", "b"]` into buf. Returns the length, or -1 (and an
+ * empty string) when it does not fit. */
+int mqtt_ha_select_options_json(const mqtt_ha_select_def_t *def, char *buf, size_t size);
+
+/* State values as published on each select's state topic. NULL when the
+ * setting is out of range and no valid option exists. */
+const char *mqtt_ha_mode_state(bool access_off, bool access_pause, uint8_t mode);
+const char *mqtt_ha_custom_button_state(bool on);
+const char *mqtt_ha_enable_c2_state(uint8_t enable_c2);
+const char *mqtt_ha_cable_lock_state(uint8_t cable_lock);
+const char *mqtt_ha_prio_strategy_state(uint8_t prio_strategy);
+
 #ifdef __cplusplus
 }
 #endif

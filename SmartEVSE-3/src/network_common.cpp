@@ -514,6 +514,14 @@ void MQTTclient_t::announce(const String& entity_name, const String& domain, con
     MQTTclient.publish(topic.c_str(), payload.c_str(), true, 0);  // Retain + QoS 0
 }
 
+// Remove an entity announced earlier: an empty retained config clears the broker's
+// retained copy and makes Home Assistant delete the entity.
+void MQTTclient_t::retract(const String& entity_name, const String& domain) {
+    String entity_suffix = entity_name;
+    entity_suffix.replace(" ", "");
+    MQTTclient.publish("homeassistant/" + domain + "/" + MQTTprefix + "-" + entity_suffix + "/config", "", true, 0);
+}
+
 MQTTclient_t MQTTclient;
 
 #ifndef SENSORBOX_VERSION

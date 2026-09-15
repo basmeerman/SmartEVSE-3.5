@@ -622,6 +622,48 @@ void test_prio_strategy_negative(void) {
     TEST_ASSERT_FALSE(mqtt_parse_command(PREFIX, PREFIX "/Set/PrioStrategy", "-1", &cmd));
 }
 
+/*
+ * @feature MQTT Command Parsing
+ * @req REQ-MQTT-015
+ * @scenario PrioStrategy set by name, as Home Assistant sends the select option
+ * @given A valid MQTT prefix and the strategy names published on /PrioStrategy
+ * @when Topic is prefix/Set/PrioStrategy with payload "ModbusAddr", "FirstConn" or "LastConn"
+ * @then Command type is MQTT_CMD_PRIO_STRATEGY with value 0, 1 or 2 respectively
+ */
+void test_prio_strategy_by_name(void) {
+    TEST_ASSERT_TRUE(mqtt_parse_command(PREFIX, PREFIX "/Set/PrioStrategy", "ModbusAddr", &cmd));
+    TEST_ASSERT_EQUAL_INT(MQTT_CMD_PRIO_STRATEGY, cmd.cmd);
+    TEST_ASSERT_EQUAL_INT(0, cmd.prio_strategy);
+    TEST_ASSERT_TRUE(mqtt_parse_command(PREFIX, PREFIX "/Set/PrioStrategy", "FirstConn", &cmd));
+    TEST_ASSERT_EQUAL_INT(1, cmd.prio_strategy);
+    TEST_ASSERT_TRUE(mqtt_parse_command(PREFIX, PREFIX "/Set/PrioStrategy", "LastConn", &cmd));
+    TEST_ASSERT_EQUAL_INT(2, cmd.prio_strategy);
+}
+
+/*
+ * @feature MQTT Input Validation
+ * @req REQ-MQTT-015
+ * @scenario PrioStrategy unknown name is rejected instead of selecting strategy 0
+ * @given A valid MQTT prefix
+ * @when Topic is prefix/Set/PrioStrategy with payload "Fastest"
+ * @then The parser returns false (atoi would have silently mapped it to ModbusAddr)
+ */
+void test_prio_strategy_unknown_name_rejected(void) {
+    TEST_ASSERT_FALSE(mqtt_parse_command(PREFIX, PREFIX "/Set/PrioStrategy", "Fastest", &cmd));
+}
+
+/*
+ * @feature MQTT Input Validation
+ * @req REQ-MQTT-015
+ * @scenario PrioStrategy empty payload is rejected
+ * @given A valid MQTT prefix
+ * @when Topic is prefix/Set/PrioStrategy with an empty payload
+ * @then The parser returns false
+ */
+void test_prio_strategy_empty_rejected(void) {
+    TEST_ASSERT_FALSE(mqtt_parse_command(PREFIX, PREFIX "/Set/PrioStrategy", "", &cmd));
+}
+
 // ---- RotationInterval ----
 
 /*
@@ -1415,6 +1457,9 @@ int main(void) {
     RUN_TEST(test_prio_strategy_last_connected);
     RUN_TEST(test_prio_strategy_out_of_range);
     RUN_TEST(test_prio_strategy_negative);
+    RUN_TEST(test_prio_strategy_by_name);
+    RUN_TEST(test_prio_strategy_unknown_name_rejected);
+    RUN_TEST(test_prio_strategy_empty_rejected);
 
     // RotationInterval
     RUN_TEST(test_rotation_interval_zero);

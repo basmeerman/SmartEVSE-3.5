@@ -149,7 +149,6 @@ extern uint8_t pilot;
 extern const char StrStateName[15][13];
 const char StrStateNameWeb[15][17] = {"Ready to Charge", "Connected to EV", "Charging", "D", "Request State B", "State B OK", "Request State C", "State C OK", "Activate", "Charging Stopped", "Stop Charging", "Modem Setup", "Modem Request", "Modem Done", "Modem Denied"};
 const char StrErrorNameWeb[9][20] = {"None", "No Power Available", "Communication Error", "Temperature High", "EV Meter Comm Error", "RCM Tripped", "RCM Test", "Test IO", "Flash Error"};
-const char StrMode[3][8] = {"Normal", "Smart", "Solar"};
 const char StrRFIDStatusWeb[8][20] = {"Ready to read card","Present", "Card Stored", "Card Deleted", "Card already stored", "Card not in storage", "Card Storage full", "Invalid" };
 extern const char StrRFIDReader[7][10] = {"Disabled", "EnableAll", "EnableOne", "Learn", "Delete", "DeleteAll", "Rmt/OCPP"};
 bool BuzzerPresent = false;
@@ -821,6 +820,44 @@ void printRFID(char *buf, size_t bufsize) {
 }
 
 
+// Issue #193: announce gates that were open when discovery was last sent (0xFF = never).
+static uint8_t mqtt_ha_announced_gates = 0xFF;
+
+// Announce the HA select entities from the mqtt_ha_selects table, plus the Master-only
+// scheduling numbers. An entity whose state is only published under a condition (Master
+// role, cable lock fitted) is announced under that same condition and removed otherwise,
+// so Home Assistant never keeps an entity that can only ever be "unknown".
+static void mqttAnnounceGatedEntities() {
+    char options[MQTT_HA_OPTIONS_JSON_MAX];
+    for (int id = 0; id < MQTT_HA_SELECT_COUNT; id++) {
+        const mqtt_ha_select_def_t *def = &mqtt_ha_selects[id];
+        if (!mqtt_ha_gate_open(def->gate, LoadBl, Lock)) {
+            MQTTclient.retract(def->name, "select");
+            continue;
+        }
+        if (mqtt_ha_select_options_json(def, options, sizeof(options)) < 0)
+            continue;   // cannot happen: test_ha_select checks every table entry fits
+        String optional_payload = MQTTclient.jsna("state_topic", MQTTprefix + def->topic)
+            + MQTTclient.jsna("command_topic", MQTTprefix + def->command_topic) + options;
+        MQTTclient.announce(def->name, "select", optional_payload);
+    }
+
+    if (mqtt_ha_gate_open(MQTT_HA_GATE_MASTER, LoadBl, Lock)) {
+        String optional_payload = MQTTclient.jsna("command_topic", String(MQTTprefix + "/Set/RotationInterval")) + MQTTclient.jsna("min", "0") + MQTTclient.jsna("max", "1440") + MQTTclient.jsna("mode","box");
+        optional_payload += MQTTclient.jsna("unit_of_measurement", "min");
+        MQTTclient.announce("Rotation Interval", "number", optional_payload);
+
+        optional_payload = MQTTclient.jsna("command_topic", String(MQTTprefix + "/Set/IdleTimeout")) + MQTTclient.jsna("min", "30") + MQTTclient.jsna("max", "300") + MQTTclient.jsna("mode","box");
+        optional_payload += MQTTclient.jsna("unit_of_measurement", "s");
+        MQTTclient.announce("Idle Timeout", "number", optional_payload);
+    } else {
+        MQTTclient.retract("Rotation Interval", "number");
+        MQTTclient.retract("Idle Timeout", "number");
+    }
+
+    mqtt_ha_announced_gates = mqtt_ha_gate_mask(LoadBl, Lock);
+}
+
 void SetupMQTTClient() {
     // Initialize MQTT change-only publish cache
     mqtt_cache_init(&mqtt_cache, MQTTHeartbeat);
@@ -932,10 +969,6 @@ void SetupMQTTClient() {
     MQTTclient.announce("LED Color Solar", "text", optional_payload);
     optional_payload = MQTTclient.jsna("state_topic", String(MQTTprefix + "/LEDColorCustom")) + MQTTclient.jsna("command_topic", String(MQTTprefix + "/Set/ColorCustom"));
     MQTTclient.announce("LED Color Custom", "text", optional_payload);
-    
-    optional_payload = MQTTclient.jsna("state_topic", String(MQTTprefix + "/CustomButton")) + MQTTclient.jsna("command_topic", String(MQTTprefix + "/Set/CustomButton"));
-    optional_payload += String(R"(, "options" : ["On", "Off"])");
-    MQTTclient.announce("Custom Button", "select", optional_payload);
 
     optional_payload = MQTTclient.jsna("device_class","duration") + MQTTclient.jsna("unit_of_measurement","s") + MQTTclient.jsna("state_class","measurement");
     MQTTclient.announce("SolarStopTimer", "sensor", optional_payload);
@@ -961,14 +994,9 @@ void SetupMQTTClient() {
     MQTTclient.announce("ApiStaleCount", "sensor", optional_payload);
     // END PLAN-09
 
-    //set the parameters for and MQTTclient.announce select entities, overriding automatic state_topic:
-    optional_payload = MQTTclient.jsna("state_topic", String(MQTTprefix + "/Mode")) + MQTTclient.jsna("command_topic", String(MQTTprefix + "/Set/Mode"));
-    optional_payload += String(R"(, "options" : ["Off", "Normal", "Smart", "Solar", "Pause"])");
-    MQTTclient.announce("Mode", "select", optional_payload);
-
-    optional_payload = MQTTclient.jsna("state_topic", String(MQTTprefix + "/EnableC2")) + MQTTclient.jsna("command_topic", String(MQTTprefix + "/Set/EnableC2"));
-    optional_payload += String(R"(, "options" : ["Not present", "Always Off", "Solar Off", "Always On", "Auto"])");
-    MQTTclient.announce("EnableC2", "select", optional_payload);
+    // Select entities (Mode, EnableC2, Custom Button, Cable Lock, Priority Strategy) plus the
+    // Master-only scheduling numbers are announced from the mqtt_ha_selects table:
+    mqttAnnounceGatedEntities();
 
     //set the parameters for and MQTTclient.announce number entities:
     optional_payload = MQTTclient.jsna("command_topic", String(MQTTprefix + "/Set/CurrentOverride")) + MQTTclient.jsna("min", "0") + MQTTclient.jsna("max", MaxCurrent ) + MQTTclient.jsna("mode","slider");
@@ -977,24 +1005,6 @@ void SetupMQTTClient() {
 
     optional_payload = MQTTclient.jsna("device_class","current") + MQTTclient.jsna("unit_of_measurement","A") + MQTTclient.jsna("command_topic", String(MQTTprefix + "/Set/CurrentMaxSumMains")) + MQTTclient.jsna("min", "0") + MQTTclient.jsna("max", "600") + MQTTclient.jsna("mode","box");
     MQTTclient.announce("Current Max Sum Mains", "number", optional_payload);
-
-    //set the parameters for and MQTTclient.announce Cable Lock:
-    optional_payload = MQTTclient.jsna("cablelock_topic", String(MQTTprefix + "/CableLock")) + MQTTclient.jsna("command_topic", String(MQTTprefix + "/Set/CableLock"));
-    optional_payload += String(R"(, "options" : ["0", "1"])");
-    MQTTclient.announce("Cable Lock", "select", optional_payload);
-
-    //set the parameters for and MQTTclient.announce priority scheduling entities:
-    optional_payload = MQTTclient.jsna("state_topic", String(MQTTprefix + "/PrioStrategy")) + MQTTclient.jsna("command_topic", String(MQTTprefix + "/Set/PrioStrategy"));
-    optional_payload += String(R"(, "options" : ["0", "1", "2"])");
-    MQTTclient.announce("Priority Strategy", "select", optional_payload);
-
-    optional_payload = MQTTclient.jsna("command_topic", String(MQTTprefix + "/Set/RotationInterval")) + MQTTclient.jsna("min", "0") + MQTTclient.jsna("max", "1440") + MQTTclient.jsna("mode","box");
-    optional_payload += MQTTclient.jsna("unit_of_measurement", "min");
-    MQTTclient.announce("Rotation Interval", "number", optional_payload);
-
-    optional_payload = MQTTclient.jsna("command_topic", String(MQTTprefix + "/Set/IdleTimeout")) + MQTTclient.jsna("min", "30") + MQTTclient.jsna("max", "300") + MQTTclient.jsna("mode","box");
-    optional_payload += MQTTclient.jsna("unit_of_measurement", "s");
-    MQTTclient.announce("Idle Timeout", "number", optional_payload);
 
     optional_payload = MQTTclient.jsna("entity_category","diagnostic");
     MQTTclient.announce("Rotation Timer", "sensor", optional_payload);
@@ -1062,6 +1072,12 @@ void mqttPublishData() {
     // Detect forced publish (lastMqttUpdate set to 10 by external triggers)
     bool forced = (lastMqttUpdate >= 10);
     lastMqttUpdate = 0;
+    // LoadBl and Lock can change at runtime (web, LCD menu, Modbus) while discovery is only
+    // sent on connect: refresh it when a gated entity appears or disappears (issue #193).
+    if (mqtt_ha_gate_mask(LoadBl, Lock) != mqtt_ha_announced_gates) {
+        mqttAnnounceGatedEntities();
+        forced = true;
+    }
     if (forced)
         mqtt_cache_force_all(&mqtt_cache);
     uint32_t now_s = (uint32_t)(esp_timer_get_time() / 1000000);
@@ -1125,15 +1141,20 @@ void mqttPublishData() {
         mqtt_pub_int(MQTT_SLOT_MAX_CIRCUIT_MAINS, "/MaxCircuitMains", MaxCircuitMains, true, now_s);
         // END PLAN-14
         mqtt_pub_int(MQTT_SLOT_ESP_TEMP, "/ESPTemp", TempEVSE, false, now_s);
-        mqtt_pub_str(MQTT_SLOT_MODE, "/Mode", AccessStatus == OFF ? "Off" : AccessStatus == PAUSE ? "Pause" : Mode > 3 ? "N/A" : StrMode[Mode], true, now_s);
+        // Select states come from the same table as their announced options (issue #193)
+        const char *mode_state = mqtt_ha_mode_state(AccessStatus == OFF, AccessStatus == PAUSE, Mode);
+        mqtt_pub_str(MQTT_SLOT_MODE, "/Mode", mode_state ? mode_state : "N/A", true, now_s);
         mqtt_pub_int(MQTT_SLOT_MAX_CURRENT, "/MaxCurrent", MaxCurrent * 10, true, now_s);
-        mqtt_pub_str(MQTT_SLOT_CUSTOM_BUTTON, "/CustomButton", CustomButton ? "On" : "Off", false, now_s);
+        mqtt_pub_str(MQTT_SLOT_CUSTOM_BUTTON, "/CustomButton", mqtt_ha_custom_button_state(CustomButton), false, now_s);
         mqtt_pub_int(MQTT_SLOT_CHARGE_CURRENT, "/ChargeCurrent", Balanced[0], true, now_s);
         mqtt_pub_int(MQTT_SLOT_CHARGE_CURRENT_OVERRIDE, "/ChargeCurrentOverride", OverrideCurrent, true, now_s);
         mqtt_pub_int(MQTT_SLOT_NR_OF_PHASES, "/NrOfPhases", Nr_Of_Phases_Charging, true, now_s);
         mqtt_pub_str(MQTT_SLOT_ACCESS, "/Access", AccessStatus == OFF ? "Deny" : AccessStatus == ON ? "Allow" : AccessStatus == PAUSE ? "Pause" : "N/A", true, now_s);
         mqtt_pub_str(MQTT_SLOT_RFID, "/RFID", !RFIDReader ? "Not Installed" : RFIDstatus >= 8 ? "NOSTATUS" : StrRFIDStatusWeb[RFIDstatus], true, now_s);
-        mqtt_pub_str(MQTT_SLOT_ENABLE_C2, "/EnableC2", StrEnableC2[EnableC2], true, now_s);
+        {
+            const char *c2_state = mqtt_ha_enable_c2_state(EnableC2);
+            mqtt_pub_str(MQTT_SLOT_ENABLE_C2, "/EnableC2", c2_state ? c2_state : "N/A", true, now_s);
+        }
         if (RFIDReader) {
             char buf[15];
             printRFID(buf, sizeof(buf));
@@ -1182,8 +1203,10 @@ void mqttPublishData() {
             snprintf(color_buf, sizeof(color_buf), "%u,%u,%u", ColorCustom[0], ColorCustom[1], ColorCustom[2]);
             mqtt_pub_str(MQTT_SLOT_LED_COLOR_CUSTOM, "/LEDColorCustom", color_buf, true, now_s);
         }
-        if (Lock != 0) {
-            mqtt_pub_int(MQTT_SLOT_CABLE_LOCK, "/CableLock", CableLock, true, now_s);
+        if (mqtt_ha_gate_open(mqtt_ha_selects[MQTT_HA_SELECT_CABLE_LOCK].gate, LoadBl, Lock)) {
+            const char *lock_state = mqtt_ha_cable_lock_state(CableLock);
+            if (lock_state)
+                mqtt_pub_str(MQTT_SLOT_CABLE_LOCK, "/CableLock", lock_state, true, now_s);
         }
         mqtt_pub_int(MQTT_SLOT_ESP_UPTIME, "/ESPUptime", (int32_t)(esp_timer_get_time() / 1000000), false, now_s);
         { // WiFiRSSI is an integer but was published as String — use int wrapper
@@ -1204,9 +1227,9 @@ void mqttPublishData() {
         mqtt_pub_str(MQTT_SLOT_DISTRIBUTION, "/Distribution", FW_DISTRIBUTION, true, now_s);
         mqtt_pub_int(MQTT_SLOT_SOLAR_STOP_TIMER, "/SolarStopTimer", SolarStopTimer, false, now_s);
         mqtt_pub_int(MQTT_SLOT_CURRENT_MAX_SUM_MAINS, "/CurrentMaxSumMains", MaxSumMains, true, now_s);
-        if (LoadBl == 1) {
-            static const char *StrPrioStrategy[] = {"ModbusAddr", "FirstConn", "LastConn"};
-            mqtt_pub_str(MQTT_SLOT_PRIO_STRATEGY, "/PrioStrategy", PrioStrategy <= 2 ? StrPrioStrategy[PrioStrategy] : "N/A", true, now_s);
+        if (mqtt_ha_gate_open(mqtt_ha_selects[MQTT_HA_SELECT_PRIO_STRATEGY].gate, LoadBl, Lock)) {
+            const char *prio_state = mqtt_ha_prio_strategy_state(PrioStrategy);
+            mqtt_pub_str(MQTT_SLOT_PRIO_STRATEGY, "/PrioStrategy", prio_state ? prio_state : "N/A", true, now_s);
             mqtt_pub_int(MQTT_SLOT_ROTATION_INTERVAL, "/RotationInterval", RotationInterval, true, now_s);
             mqtt_pub_int(MQTT_SLOT_IDLE_TIMEOUT, "/IdleTimeout", IdleTimeout, true, now_s);
             mqtt_pub_int(MQTT_SLOT_ROTATION_TIMER, "/RotationTimer", RotationTimer, false, now_s);
@@ -1257,7 +1280,8 @@ void mqttSmartEVSEPublishData() {
     MQTTclientSmartEVSE.publish(MQTTSmartEVSEprefix + "/Access", AccessStatus == OFF ? "Deny" : AccessStatus == ON ? "Allow" : AccessStatus == PAUSE ? "Pause" : "N/A", true, 0);
     MQTTclientSmartEVSE.publish(MQTTSmartEVSEprefix + "/ChargeCurrent", String(Balanced[0]), true, 0);
     MQTTclientSmartEVSE.publish(MQTTSmartEVSEprefix + "/ChargeCurrentOverride", String(OverrideCurrent), true, 0);
-    MQTTclientSmartEVSE.publish(MQTTSmartEVSEprefix + "/Mode", AccessStatus == OFF ? "Off" : AccessStatus == PAUSE ? "Pause" : Mode > 3 ? "N/A" : StrMode[Mode], true, 0);
+    const char *mode_state = mqtt_ha_mode_state(AccessStatus == OFF, AccessStatus == PAUSE, Mode);
+    MQTTclientSmartEVSE.publish(MQTTSmartEVSEprefix + "/Mode", mode_state ? mode_state : "N/A", true, 0);
     MQTTclientSmartEVSE.publish(MQTTSmartEVSEprefix + "/NrOfPhases", String(Nr_Of_Phases_Charging), true, 0);
     MQTTclientSmartEVSE.publish(MQTTSmartEVSEprefix + "/State", getStateNameWeb(State), true, 0);
     MQTTclientSmartEVSE.publish(MQTTSmartEVSEprefix + "/Error", getErrorNameWeb(ErrorFlags), true, 0);

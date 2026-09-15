@@ -170,7 +170,7 @@ When connected to an MQTT broker, the following topics are available:
 
 | Topic | Values | Description |
 |-------|--------|-------------|
-| `SmartEVSE-xxxxx/Set/PrioStrategy` | 0, 1, 2 | Set priority strategy |
+| `SmartEVSE-xxxxx/Set/PrioStrategy` | 0, 1, 2 or `ModbusAddr`, `FirstConn`, `LastConn` | Set priority strategy |
 | `SmartEVSE-xxxxx/Set/RotationInterval` | 0, 30–1440 | Set rotation interval (minutes) |
 | `SmartEVSE-xxxxx/Set/IdleTimeout` | 30–300 | Set idle timeout (seconds) |
 

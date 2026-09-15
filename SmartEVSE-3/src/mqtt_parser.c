@@ -16,6 +16,10 @@ const char *mqtt_enable_c2_strings[MQTT_ENABLE_C2_COUNT] = {
     "Not present", "Always Off", "Solar Off", "Always On", "Auto"
 };
 
+const char *mqtt_prio_strategy_strings[MQTT_PRIO_STRATEGY_COUNT] = {
+    "ModbusAddr", "FirstConn", "LastConn"
+};
+
 // Match topic against prefix + suffix. Returns pointer past prefix+suffix, or NULL.
 static const char *match_topic(const char *prefix, const char *topic, const char *suffix) {
     size_t plen = strlen(prefix);
@@ -239,10 +243,20 @@ bool mqtt_parse_command(const char *prefix, const char *topic,
     /* Priority scheduling settings (Master only, see priority-scheduling.md) */
     if (match_topic(prefix, topic, "/Set/PrioStrategy")) {
         out->cmd = MQTT_CMD_PRIO_STRATEGY;
-        int val = atoi(payload);
-        if (val >= 0 && val <= 2) {
-            out->prio_strategy = (uint8_t)val;
-            return true;
+        if (payload[0] != '\0' && isdigit((unsigned char)payload[0])) {
+            int val = atoi(payload);
+            if (val >= 0 && val < MQTT_PRIO_STRATEGY_COUNT) {
+                out->prio_strategy = (uint8_t)val;
+                return true;
+            }
+            return false;
+        }
+        // Name as published on /PrioStrategy and offered by the HA select (issue #193)
+        for (int i = 0; i < MQTT_PRIO_STRATEGY_COUNT; i++) {
+            if (strcmp(payload, mqtt_prio_strategy_strings[i]) == 0) {
+                out->prio_strategy = (uint8_t)i;
+                return true;
+            }
         }
         return false;
     }
