@@ -442,7 +442,9 @@ void RunFirmwareUpdate(void) {
     xTaskCreate(
         FirmwareUpdate, // Function that should be called
         "FirmwareUpdate",// Name of the task (for debugging)
-        4096,           // Stack size (bytes)
+        8192,           // Stack size (bytes). The task runs HTTPClient TLS handshakes to github.com and,
+                        // after the redirect, to the release asset host. With 4096 the charger rebooted
+                        // mid-connect instead of logging an error, most likely a stack overflow (issue #196).
         NULL,           // Parameter to pass
         3,              // Task priority - medium
         NULL            // Task handle

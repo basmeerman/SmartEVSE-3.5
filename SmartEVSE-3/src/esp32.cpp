@@ -2581,7 +2581,7 @@ void loop() {
             }
         }
         //_LOG_A("DINGO: firmwareUpdateTimer just before decrement=%i.\n", firmwareUpdateTimer);
-        if (AutoUpdate && !shouldReboot) {                                      // we don't want to autoupdate if we are on the verge of rebooting
+        if (fw_autoupdate_allowed(AutoUpdate != 0, shouldReboot)) {             // only when AUTOUPDAT is Enabled, and not on the verge of rebooting
             firmwareUpdateTimer--;
             char version[32];
             if (firmwareUpdateTimer == FW_UPDATE_DELAY) {                       // we now have to check for a new version

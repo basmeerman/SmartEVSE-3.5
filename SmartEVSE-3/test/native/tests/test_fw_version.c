@@ -223,8 +223,52 @@ void test_update_refuses_null_and_empty(void) {
     TEST_ASSERT_FALSE(fw_version_needs_update("bm-2026.09.1", ""));
 }
 
+/* ---- Automatic updater gate (issue #196) ---- */
+
+/*
+ * @feature Firmware Update
+ * @req REQ-PWR-058
+ * @scenario The automatic updater does nothing while AUTOUPDAT is Disabled
+ * @given AUTOUPDAT = Disabled (the default) and a newer release of this distribution exists
+ * @when The once-a-second updater decides whether to check or install
+ * @then It does not run, with or without a pending reboot
+ */
+void test_autoupdate_disabled_never_runs(void) {
+    TEST_ASSERT_TRUE(fw_version_needs_update("bm-2026.09.4", "bm-2026.09.5"));
+    TEST_ASSERT_FALSE(fw_autoupdate_allowed(false, false));
+    TEST_ASSERT_FALSE(fw_autoupdate_allowed(false, true));
+}
+
+/*
+ * @feature Firmware Update
+ * @req REQ-PWR-058
+ * @scenario The automatic updater waits while a reboot is pending
+ * @given AUTOUPDAT = Enabled and the firmware is about to reboot (e.g. after a manual upload)
+ * @when The updater decides whether to check or install
+ * @then It does not run, so it cannot start a download over a freshly installed image
+ */
+void test_autoupdate_waits_for_pending_reboot(void) {
+    TEST_ASSERT_FALSE(fw_autoupdate_allowed(true, true));
+}
+
+/*
+ * @feature Firmware Update
+ * @req REQ-PWR-058
+ * @scenario The automatic updater runs when enabled and no reboot is pending
+ * @given AUTOUPDAT = Enabled and no reboot pending
+ * @when The updater decides whether to check or install
+ * @then It runs
+ */
+void test_autoupdate_enabled_runs(void) {
+    TEST_ASSERT_TRUE(fw_autoupdate_allowed(true, false));
+}
+
 int main(void) {
     TEST_SUITE_BEGIN("Firmware Version Scheme");
+
+    RUN_TEST(test_autoupdate_disabled_never_runs);
+    RUN_TEST(test_autoupdate_waits_for_pending_reboot);
+    RUN_TEST(test_autoupdate_enabled_runs);
 
     RUN_TEST(test_parse_valid_version);
     RUN_TEST(test_parse_multi_digit_sequence);

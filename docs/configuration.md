@@ -361,6 +361,7 @@ Automatic update of the SmartEVSE firmware.
 
 - **Disabled**: No automatic update.
 - **Enabled**: Checks daily for a new stable release **of this distribution** and installs it when no EV is connected. Releases are downloaded from this repository's GitHub releases and verified against the built-in signing keys.
+  The current setting is reported as `auto_update` (0/1) in `GET /settings`.
   **Note**: this only works when the running version is in this distribution's format, `bm-YYYY.MM.N` (e.g. `bm-2026.09.1`). Locally compiled builds, nightly builds, and firmware from another distribution never auto-update — by design, so an automatic update can never silently move a device between distributions. Switching distributions stays possible from the update page, as a deliberate manual action.
 
 ## APP PIN
