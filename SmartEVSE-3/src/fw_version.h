@@ -77,6 +77,16 @@ int fw_version_compare(const fw_version_t *a, const fw_version_t *b);
  */
 bool fw_version_needs_update(const char *current, const char *latest);
 
+/*
+ * Decide whether the automatic updater may check for, or install, a release.
+ *
+ * True only when the AUTOUPDAT setting is enabled and no reboot is pending.
+ * AUTOUPDAT defaults to Disabled, so a device never downloads firmware on its
+ * own unless the owner turned it on. Manual updates (upload, or the update
+ * page's download action) are deliberate and are not governed by this.
+ */
+bool fw_autoupdate_allowed(bool auto_update_enabled, bool reboot_pending);
+
 #ifdef __cplusplus
 }
 #endif

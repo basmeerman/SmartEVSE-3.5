@@ -40,6 +40,7 @@ extern uint8_t Lock;
 extern uint8_t Config;
 extern uint8_t LCDlock;
 extern uint8_t CableLock;
+extern uint8_t AutoUpdate;
 extern EnableC2_t EnableC2;
 extern uint8_t BacklightSet;
 extern uint16_t OverrideCurrent;
@@ -313,6 +314,7 @@ bool handle_URI(struct mg_connection *c, struct mg_http_message *hm,  webServerR
         doc["settings"]["lock"] = Lock;
         doc["settings"]["cablelock"] = CableLock;
         doc["settings"]["ledmode"] = LedMode;
+        doc["settings"]["auto_update"] = AutoUpdate;   // AUTOUPDAT menu item (0 = Disabled, 1 = Enabled), read-only here — issue #196
         /* Plan 16 Phase 1 — HTTP auth state. `auth_mode` is the persisted setting
          * (0=Off legacy / 1=Required); `auth_required` is the same boolean in a
          * name the Web UI can use directly for banner / prompt logic. */

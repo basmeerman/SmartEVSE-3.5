@@ -110,3 +110,9 @@ bool fw_version_needs_update(const char *current, const char *latest) {
     }
     return fw_version_compare(&cur, &lat) < 0;
 }
+
+bool fw_autoupdate_allowed(bool auto_update_enabled, bool reboot_pending) {
+    /* Never on the verge of a reboot: a manual upload may just have installed
+     * an image that is waiting to boot. */
+    return auto_update_enabled && !reboot_pending;
+}
