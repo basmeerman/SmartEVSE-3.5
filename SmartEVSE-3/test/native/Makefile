@@ -57,8 +57,12 @@ $(BUILD)/test_mqtt_parser: $(TEST_DIR)/test_mqtt_parser.c $(MQTT_PARSER_SRC) $(S
 $(BUILD)/test_mqtt_soc: $(TEST_DIR)/test_mqtt_soc.c $(MQTT_PARSER_SRC) $(SRC_DIR)/mqtt_parser.h include/*.h | $(BUILD)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(TEST_DIR)/test_mqtt_soc.c $(MQTT_PARSER_SRC)
 
-$(BUILD)/test_mqtt_publish: $(TEST_DIR)/test_mqtt_publish.c $(MQTT_PUBLISH_SRC) $(SRC_DIR)/mqtt_publish.h include/*.h | $(BUILD)
-	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(TEST_DIR)/test_mqtt_publish.c $(MQTT_PUBLISH_SRC)
+$(BUILD)/test_mqtt_publish: $(TEST_DIR)/test_mqtt_publish.c $(MQTT_PUBLISH_SRC) $(MQTT_PARSER_SRC) $(SRC_DIR)/mqtt_publish.h $(SRC_DIR)/mqtt_parser.h include/*.h | $(BUILD)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(TEST_DIR)/test_mqtt_publish.c $(MQTT_PUBLISH_SRC) $(MQTT_PARSER_SRC)
+
+# Issue #193 — HA select options vs published state vs parser (links both modules)
+$(BUILD)/test_ha_select: $(TEST_DIR)/test_ha_select.c $(MQTT_PUBLISH_SRC) $(MQTT_PARSER_SRC) $(SRC_DIR)/mqtt_publish.h $(SRC_DIR)/mqtt_parser.h include/*.h | $(BUILD)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(TEST_DIR)/test_ha_select.c $(MQTT_PUBLISH_SRC) $(MQTT_PARSER_SRC)
 
 $(BUILD)/test_http_api: $(TEST_DIR)/test_http_api.c $(HTTP_API_SRC) $(SRC_DIR)/http_api.h include/*.h | $(BUILD)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(TEST_DIR)/test_http_api.c $(HTTP_API_SRC)

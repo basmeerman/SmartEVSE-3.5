@@ -96,6 +96,7 @@ public:
     void publish(const String &topic, const String &payload, bool retained, int qos);
     void subscribe(const String &topic, int qos);
     void announce(const String& entity_name, const String& domain, const String& optional_payload);
+    void retract(const String& entity_name, const String& domain);
     bool connected;
 };
 

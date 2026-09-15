@@ -94,6 +94,11 @@ typedef struct {
 #define MQTT_ENABLE_C2_COUNT 5
 extern const char *mqtt_enable_c2_strings[MQTT_ENABLE_C2_COUNT];
 
+// PrioStrategy names as published on /PrioStrategy, indexed by strategy value.
+// /Set/PrioStrategy accepts either the number or the name (issue #193).
+#define MQTT_PRIO_STRATEGY_COUNT 3
+extern const char *mqtt_prio_strategy_strings[MQTT_PRIO_STRATEGY_COUNT];
+
 // Parse a topic+payload into a structured command.
 // prefix: the MQTT prefix (e.g. "SmartEVSE/123456")
 // Returns true if a valid command was parsed, false if unrecognized/invalid.
