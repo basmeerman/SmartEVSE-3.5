@@ -322,6 +322,43 @@ bool ocpp_should_report_occupied(bool locking_tx_present,
                                  unsigned long now_ms,
                                  unsigned long last_tx_notif_ms);
 
+/* ---- StopTransaction meter value synchronization (issue #202) ---- */
+
+#define OCPP_STOP_SYNC_MS              5000UL  /* Settle time after charging stops       */
+#define OCPP_STOP_METER_WAIT_MAX_MS   60000UL  /* Give up waiting for a valid EV reading */
+
+typedef enum {
+    OCPP_STOP_WAIT           = 0,  /* Hold StopTransaction back                       */
+    OCPP_STOP_READY          = 1,  /* Release it; MicroOcpp samples the live reading  */
+    OCPP_STOP_READY_FALLBACK = 2   /* Release it with meterStop = meterStart          */
+} ocpp_stop_ready_t;
+
+/*
+ * Gate for MicroOcpp's StopTxReadyInput. MicroOcpp samples meterStop as soon
+ * as this returns ready, so it must not be ready before the EV meter has a
+ * reading that belongs to the transaction. After a reboot during charging the
+ * restored transaction is ended (PowerLoss) before the first Modbus reading;
+ * without this check meterStop was 0.
+ *
+ *   now_ms            — millis()
+ *   sync_ms           — last time charging was permitted (OcppStopReadingSyncTime),
+ *                       seeded at ocppInit()
+ *   ev_meter_present  — an EV meter is configured (EVMeter.Type != 0)
+ *   energy_wh         — current EV meter energy register (EVMeter.Energy)
+ *   meter_start_wh    — transaction meterStart, or -1 if unknown
+ *
+ * Returns WAIT during the 5 s settle window, and afterwards until the reading
+ * is non-zero and not below meterStart. After OCPP_STOP_METER_WAIT_MAX_MS
+ * without a valid reading it returns READY_FALLBACK, so a dead meter cannot
+ * block the StopTransaction forever and meterStop is never below meterStart.
+ * Without an EV meter there is nothing to wait for: READY after the window.
+ */
+ocpp_stop_ready_t ocpp_stop_tx_ready(unsigned long now_ms,
+                                     unsigned long sync_ms,
+                                     bool ev_meter_present,
+                                     int32_t energy_wh,
+                                     int32_t meter_start_wh);
+
 #ifdef __cplusplus
 }
 #endif

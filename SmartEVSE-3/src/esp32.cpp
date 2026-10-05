@@ -1912,8 +1912,17 @@ void ocppInit() {
     });
 
     setStopTxReadyInput([] () {
-        // Stop value synchronization: block StopTransaction for 5 seconds to give the Modbus readings some time to come through
-        return millis() - OcppStopReadingSyncTime >= 5000;
+        // Stop value synchronization: MicroOcpp samples meterStop as soon as this returns true.
+        // Hold StopTransaction until the EV meter has a reading for this transaction (issue #202).
+        auto& tx = getTransaction();
+        int32_t meterStart = tx ? tx->getMeterStart() : -1;
+        ocpp_stop_ready_t ready = ocpp_stop_tx_ready(millis(), OcppStopReadingSyncTime,
+                                                     EVMeter.Type != 0, EVMeter.Energy, meterStart);
+        if (ready == OCPP_STOP_READY_FALLBACK && tx && tx->getMeterStop() < 0 && meterStart >= 0) {
+            _LOG_W("OCPP: no valid EV meter reading, StopTransaction uses meterStart %ld Wh\n", (long) meterStart);
+            tx->setMeterStop(meterStart);
+        }
+        return ready != OCPP_STOP_WAIT;
     });
 
     setTxNotificationOutput([] (MicroOcpp::Transaction*, MicroOcpp::TxNotification event) {
@@ -1950,6 +1959,7 @@ void ocppInit() {
 
     OcppLastOcppResponse = millis(); // Seed silence detector — see ocpp_silence_decide()
 
+    OcppStopReadingSyncTime = millis(); // Start the stop-value wait at boot, not at millis() == 0 (issue #202)
     endTransaction(nullptr, "PowerLoss"); // If a transaction from previous power cycle is still running, abort it here
 }
 
