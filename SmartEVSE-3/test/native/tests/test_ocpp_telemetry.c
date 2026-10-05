@@ -202,6 +202,58 @@ void test_telemetry_tx_discarded_null(void) {
     TEST_ASSERT_TRUE(true);
 }
 
+/* ---- Silent reconnects and re-inits (issue #201) ---- */
+
+/*
+ * @feature OCPP Telemetry
+ * @req REQ-OCPP-129
+ * @scenario Forced reconnects and re-inits have their own counters
+ * @given Telemetry is initialized
+ * @when ocpp_telemetry_silent_reconnect is called three times and ocpp_telemetry_reinit once
+ * @then silent_reconnect_count is 3, reinit_count is 1 and the WebSocket counters are unchanged
+ */
+void test_telemetry_silent_reconnect_and_reinit(void) {
+    setup();
+    ocpp_telemetry_silent_reconnect(&t);
+    ocpp_telemetry_silent_reconnect(&t);
+    ocpp_telemetry_silent_reconnect(&t);
+    ocpp_telemetry_reinit(&t);
+    TEST_ASSERT_EQUAL_INT(3, t.silent_reconnect_count);
+    TEST_ASSERT_EQUAL_INT(1, t.reinit_count);
+    TEST_ASSERT_EQUAL_INT(0, t.ws_connect_count);
+    TEST_ASSERT_EQUAL_INT(0, t.ws_disconnect_count);
+}
+
+/*
+ * @feature OCPP Telemetry
+ * @req REQ-OCPP-129
+ * @scenario Init clears the reconnect and re-init counters
+ * @given silent_reconnect_count is 4 and reinit_count is 2
+ * @when ocpp_telemetry_init is called
+ * @then Both counters are 0
+ */
+void test_telemetry_init_clears_reinit_counters(void) {
+    t.silent_reconnect_count = 4;
+    t.reinit_count = 2;
+    ocpp_telemetry_init(&t);
+    TEST_ASSERT_EQUAL_INT(0, t.silent_reconnect_count);
+    TEST_ASSERT_EQUAL_INT(0, t.reinit_count);
+}
+
+/*
+ * @feature OCPP Telemetry
+ * @req REQ-OCPP-129
+ * @scenario Reconnect and re-init counters tolerate a NULL struct
+ * @given A NULL telemetry pointer
+ * @when ocpp_telemetry_silent_reconnect and ocpp_telemetry_reinit are called
+ * @then Nothing happens and the program does not crash
+ */
+void test_telemetry_reinit_counters_null(void) {
+    ocpp_telemetry_silent_reconnect(NULL);
+    ocpp_telemetry_reinit(NULL);
+    TEST_ASSERT_TRUE(true);
+}
+
 int main(void) {
     TEST_SUITE_BEGIN("OCPP Telemetry");
 
@@ -215,6 +267,9 @@ int main(void) {
     RUN_TEST(test_telemetry_tx_discarded);
     RUN_TEST(test_telemetry_init_clears_discards);
     RUN_TEST(test_telemetry_tx_discarded_null);
+    RUN_TEST(test_telemetry_silent_reconnect_and_reinit);
+    RUN_TEST(test_telemetry_init_clears_reinit_counters);
+    RUN_TEST(test_telemetry_reinit_counters_null);
 
     TEST_SUITE_RESULTS();
 }

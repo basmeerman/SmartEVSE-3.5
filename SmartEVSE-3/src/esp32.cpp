@@ -1782,6 +1782,11 @@ static void ocppWatchTransactions(std::shared_ptr<MicroOcpp::Transaction> curren
     }
 }
 
+// Forced reconnects in a row that got no answer to the Heartbeat probe, and
+// whether the coming ocppInit() is a re-init that keeps the counters (issue #201).
+static uint8_t OcppSilentReconnects = 0;
+static bool OcppReinitPending = false;
+
 static void ocppResetTransactionWatch() {
     for (int i = 0; i < OCPP_TX_WATCH_SLOTS; i++) {
         OcppWatchedTx[i].reset();
@@ -1790,7 +1795,12 @@ static void ocppResetTransactionWatch() {
 
 void ocppInit() {
 
-    ocpp_telemetry_init(&OcppTelemetry);
+    // A re-init after silent reconnects keeps the counters since boot (issue #201)
+    if (!OcppReinitPending) {
+        ocpp_telemetry_init(&OcppTelemetry);
+    }
+    OcppReinitPending = false;
+    OcppSilentReconnects = 0;
 
 #ifdef MO_CUSTOM_CONSOLE
     mocpp_set_console_out(ocpp_console_out);
@@ -2095,13 +2105,32 @@ void ocppLoop() {
                 },
                 [] (JsonObject response) {
                     OcppLastOcppResponse = millis();
+                    OcppSilentReconnects = 0;
                 }
             );
         } else if (silenceAction == OCPP_SILENCE_FORCE_RECONNECT) {
             _LOG_A("OCPP backend unresponsive for %lus, forcing WebSocket reconnect\n",
                     (millis() - OcppLastOcppResponse) / 1000UL);
             OcppLastOcppResponse = millis(); // Reset to avoid repeated rapid reconnects
+            if (OcppSilentReconnects < UINT8_MAX) {
+                OcppSilentReconnects++;
+            }
+            ocpp_telemetry_silent_reconnect(&OcppTelemetry);
             OcppWsClient->reloadConfigs();
+        }
+
+        // A reconnect does not help when MicroOcpp is still waiting for the answer
+        // to a request lost on the old socket: only a fresh instance sends again.
+        // ocppDeinit() would end a session or release its cable lock, so this waits.
+        if (ocpp_silence_should_reinit(OcppSilentReconnects,
+                isTransactionActive() || isTransactionRunning() || OcppLockingTx != nullptr,
+                State == STATE_C)) {
+            _LOG_A("OCPP: %u forced reconnects got no answer, re-initialising MicroOcpp\n",
+                    OcppSilentReconnects);
+            ocpp_telemetry_reinit(&OcppTelemetry);
+            OcppReinitPending = true;
+            ocppDeinit(); // the OCPP lifecycle check calls ocppInit() on its next pass
+            return;
         }
     }
 

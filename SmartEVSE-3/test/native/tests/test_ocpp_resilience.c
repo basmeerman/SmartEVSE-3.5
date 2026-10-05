@@ -200,6 +200,84 @@ void test_silence_healthy_steady_state(void) {
     TEST_ASSERT_EQUAL_INT(OCPP_SILENCE_NO_ACTION, a);
 }
 
+/* ---- Re-initialise MicroOcpp when reconnects do not help (issue #201) ---- */
+
+/*
+ * @feature OCPP Silence Detection
+ * @req REQ-OCPP-128
+ * @scenario Escalate to re-init when forced reconnects do not help
+ * @given OCPP_SILENCE_REINIT_AFTER consecutive forced reconnects without a probe answer, no OCPP transaction active or running, EVSE not in STATE_C
+ * @when ocpp_silence_should_reinit is called
+ * @then Returns true
+ */
+void test_reinit_after_silent_reconnects_when_idle(void) {
+    TEST_ASSERT_TRUE(ocpp_silence_should_reinit(OCPP_SILENCE_REINIT_AFTER, false, false));
+}
+
+/*
+ * @feature OCPP Silence Detection
+ * @req REQ-OCPP-128
+ * @scenario One forced reconnect is not enough to re-init
+ * @given One forced reconnect fewer than OCPP_SILENCE_REINIT_AFTER, idle EVSE
+ * @when ocpp_silence_should_reinit is called
+ * @then Returns false, the plain reconnect gets another chance
+ */
+void test_reinit_not_before_threshold(void) {
+    TEST_ASSERT_FALSE(ocpp_silence_should_reinit(OCPP_SILENCE_REINIT_AFTER - 1, false, false));
+    TEST_ASSERT_FALSE(ocpp_silence_should_reinit(0, false, false));
+}
+
+/*
+ * @feature OCPP Silence Detection
+ * @req REQ-OCPP-128
+ * @scenario Re-init waits while a session is in progress
+ * @given The reconnect threshold is reached but an OCPP transaction is active or running, or holds the cable lock
+ * @when ocpp_silence_should_reinit is called
+ * @then Returns false, because ocppDeinit() would end the session or release the lock
+ */
+void test_reinit_blocked_by_active_transaction(void) {
+    TEST_ASSERT_FALSE(ocpp_silence_should_reinit(OCPP_SILENCE_REINIT_AFTER, true, false));
+    TEST_ASSERT_FALSE(ocpp_silence_should_reinit(OCPP_SILENCE_REINIT_AFTER + 10, true, false));
+}
+
+/*
+ * @feature OCPP Silence Detection
+ * @req REQ-OCPP-128
+ * @scenario Re-init waits while the EV is charging
+ * @given The reconnect threshold is reached, no OCPP transaction, EVSE in STATE_C
+ * @when ocpp_silence_should_reinit is called
+ * @then Returns false
+ */
+void test_reinit_blocked_while_charging(void) {
+    TEST_ASSERT_FALSE(ocpp_silence_should_reinit(OCPP_SILENCE_REINIT_AFTER, false, true));
+}
+
+/*
+ * @feature OCPP Silence Detection
+ * @req REQ-OCPP-128
+ * @scenario Re-init happens as soon as the session ends
+ * @given Many forced reconnects piled up during a charging session
+ * @when The transaction ends and the EVSE leaves STATE_C
+ * @then ocpp_silence_should_reinit returns true without waiting for more reconnects
+ */
+void test_reinit_after_session_ends(void) {
+    uint8_t piled_up = OCPP_SILENCE_REINIT_AFTER + 20;
+    TEST_ASSERT_FALSE(ocpp_silence_should_reinit(piled_up, true, true));
+    TEST_ASSERT_TRUE(ocpp_silence_should_reinit(piled_up, false, false));
+}
+
+/*
+ * @feature OCPP Silence Detection
+ * @req REQ-OCPP-128
+ * @scenario Saturated reconnect counter still triggers re-init
+ * @given The consecutive reconnect counter is at its maximum (255)
+ * @when ocpp_silence_should_reinit is called on an idle EVSE
+ * @then Returns true
+ */
+void test_reinit_counter_saturated(void) {
+    TEST_ASSERT_TRUE(ocpp_silence_should_reinit(255, false, false));
+}
+
 /* ---- Main ---- */
 int main(void) {
     TEST_SUITE_BEGIN("OCPP Silence Detection");
@@ -214,6 +292,12 @@ int main(void) {
     RUN_TEST(test_silence_zero_response_does_not_force_reconnect);
     RUN_TEST(test_silence_zero_response_no_probe_due);
     RUN_TEST(test_silence_healthy_steady_state);
+    RUN_TEST(test_reinit_after_silent_reconnects_when_idle);
+    RUN_TEST(test_reinit_not_before_threshold);
+    RUN_TEST(test_reinit_blocked_by_active_transaction);
+    RUN_TEST(test_reinit_blocked_while_charging);
+    RUN_TEST(test_reinit_after_session_ends);
+    RUN_TEST(test_reinit_counter_saturated);
 
     TEST_SUITE_RESULTS();
 }

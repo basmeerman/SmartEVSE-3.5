@@ -522,3 +522,14 @@ int ocpp_tx_attempts_upgrade(int current) {
     }
     return current;
 }
+
+/* ---- Outgoing queue stuck across reconnects (issue #201) ---- */
+
+bool ocpp_silence_should_reinit(uint8_t silent_reconnects,
+                                bool session_in_progress,
+                                bool charging) {
+    if (silent_reconnects < OCPP_SILENCE_REINIT_AFTER) {
+        return false;
+    }
+    return !session_in_progress && !charging;
+}

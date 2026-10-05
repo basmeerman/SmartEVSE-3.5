@@ -21,6 +21,8 @@ typedef struct {
     /* WebSocket connection tracking */
     uint32_t ws_connect_count;
     uint32_t ws_disconnect_count;
+    uint32_t silent_reconnect_count; /* forced by the silence detector */
+    uint32_t reinit_count;           /* MicroOcpp re-initialised, issue #201 */
 
     /* Transaction lifecycle */
     uint32_t tx_start_count;
@@ -50,6 +52,8 @@ void ocpp_telemetry_ws_disconnected(ocpp_telemetry_t *t);
 void ocpp_telemetry_tx_started(ocpp_telemetry_t *t);
 void ocpp_telemetry_tx_stopped(ocpp_telemetry_t *t);
 void ocpp_telemetry_tx_discarded(ocpp_telemetry_t *t);
+void ocpp_telemetry_silent_reconnect(ocpp_telemetry_t *t);
+void ocpp_telemetry_reinit(ocpp_telemetry_t *t);
 void ocpp_telemetry_auth_accepted(ocpp_telemetry_t *t);
 void ocpp_telemetry_auth_rejected(ocpp_telemetry_t *t);
 void ocpp_telemetry_auth_timeout(ocpp_telemetry_t *t);

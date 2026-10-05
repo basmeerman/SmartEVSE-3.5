@@ -40,6 +40,16 @@ void ocpp_telemetry_tx_discarded(ocpp_telemetry_t *t) {
     t->tx_discard_count++;
 }
 
+void ocpp_telemetry_silent_reconnect(ocpp_telemetry_t *t) {
+    if (!t) return;
+    t->silent_reconnect_count++;
+}
+
+void ocpp_telemetry_reinit(ocpp_telemetry_t *t) {
+    if (!t) return;
+    t->reinit_count++;
+}
+
 void ocpp_telemetry_auth_accepted(ocpp_telemetry_t *t) {
     if (!t) return;
     t->auth_accept_count++;
