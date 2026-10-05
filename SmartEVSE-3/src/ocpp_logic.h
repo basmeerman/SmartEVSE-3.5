@@ -432,6 +432,12 @@ bool ocpp_config_key_is_secret(const char *key);
  */
 size_t ocpp_redact_auth_key(char *line);
 
+/*
+ * True when an OCPP auth key is configured. HTTP responses report only this,
+ * never the key itself (SECURITY C-2), also right after the key was set.
+ */
+bool ocpp_auth_key_is_set(const char *auth_key);
+
 #ifdef __cplusplus
 }
 #endif

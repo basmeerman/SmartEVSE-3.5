@@ -369,10 +369,7 @@ bool handle_URI(struct mg_connection *c, struct mg_http_message *hm,  webServerR
         // any client. Mirror the mqtt.password_set pattern — caller can tell if
         // a key is configured without being able to read it. Before this fix
         // any LAN client calling GET /settings obtained the plaintext key.
-        {
-            const char *ak = OcppWsClient ? OcppWsClient->getAuthKey() : "";
-            doc["ocpp"]["auth_key_set"] = (ak != NULL && ak[0] != '\0');
-        }
+        doc["ocpp"]["auth_key_set"] = ocpp_auth_key_is_set(OcppWsClient ? OcppWsClient->getAuthKey() : "");
 
         {
             auto freevendMode = MicroOcpp::getConfigurationPublic(MO_CONFIG_EXT_PREFIX "FreeVendActive");
@@ -841,7 +838,8 @@ bool handle_URI(struct mg_connection *c, struct mg_http_message *hm,  webServerR
                                              : "Invalid auth key";
                     } else if (OcppWsClient) {
                         OcppWsClient->setAuthKey(auth_key);
-                        doc["ocpp_auth_key"] = OcppWsClient->getAuthKey();
+                        // SECURITY C-2: confirm without echoing the key back
+                        doc["ocpp_auth_key_set"] = ocpp_auth_key_is_set(OcppWsClient->getAuthKey());
                     } else {
                         doc["ocpp_auth_key"] = "Can only update when OCPP enabled";
                     }

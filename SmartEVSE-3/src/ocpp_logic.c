@@ -566,6 +566,10 @@ static char *ocpp_json_string_end(char *s) {
     return s;
 }
 
+bool ocpp_auth_key_is_set(const char *auth_key) {
+    return auth_key != NULL && auth_key[0] != '\0';
+}
+
 size_t ocpp_redact_auth_key(char *line) {
     if (!line) {
         return 0;

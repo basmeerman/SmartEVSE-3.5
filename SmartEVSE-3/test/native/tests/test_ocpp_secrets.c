@@ -181,6 +181,20 @@ void test_redact_no_key_untouched(void) {
     TEST_ASSERT_EQUAL_INT(0, (int) ocpp_redact_auth_key(NULL));
 }
 
+/*
+ * @feature OCPP Secret Handling
+ * @req REQ-OCPP-132
+ * @scenario HTTP reports only whether an auth key is set
+ * @given A configured key, an empty key and no key (NULL)
+ * @when ocpp_auth_key_is_set is called
+ * @then Returns true only for the configured key, so /settings never needs the value
+ */
+void test_auth_key_is_set(void) {
+    TEST_ASSERT_TRUE(ocpp_auth_key_is_set("0011AABB"));
+    TEST_ASSERT_FALSE(ocpp_auth_key_is_set(""));
+    TEST_ASSERT_FALSE(ocpp_auth_key_is_set(NULL));
+}
+
 int main(void) {
     TEST_SUITE_BEGIN("OCPP Secret Handling");
 
@@ -194,6 +208,7 @@ int main(void) {
     RUN_TEST(test_redact_entry_without_value);
     RUN_TEST(test_redact_auth_token_line);
     RUN_TEST(test_redact_no_key_untouched);
+    RUN_TEST(test_auth_key_is_set);
 
     TEST_SUITE_RESULTS();
 }
