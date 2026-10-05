@@ -122,6 +122,9 @@ $(BUILD)/test_ocpp_stop_sync: $(TEST_DIR)/test_ocpp_stop_sync.c $(OCPP_LOGIC_SRC
 $(BUILD)/test_ocpp_tx_sync: $(TEST_DIR)/test_ocpp_tx_sync.c $(OCPP_LOGIC_SRC) $(SRC_DIR)/ocpp_logic.h include/*.h | $(BUILD)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(TEST_DIR)/test_ocpp_tx_sync.c $(OCPP_LOGIC_SRC)
 
+$(BUILD)/test_ocpp_secrets: $(TEST_DIR)/test_ocpp_secrets.c $(OCPP_LOGIC_SRC) $(SRC_DIR)/ocpp_logic.h include/*.h | $(BUILD)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(TEST_DIR)/test_ocpp_secrets.c $(OCPP_LOGIC_SRC)
+
 $(BUILD)/test_net_watchdog: $(TEST_DIR)/test_net_watchdog.c $(NET_WATCHDOG_SRC) $(SRC_DIR)/net_watchdog.h include/*.h | $(BUILD)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(TEST_DIR)/test_net_watchdog.c $(NET_WATCHDOG_SRC)
 

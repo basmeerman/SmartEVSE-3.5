@@ -412,6 +412,26 @@ bool ocpp_silence_should_reinit(uint8_t silent_reconnects,
                                 bool session_in_progress,
                                 bool charging);
 
+/* ---- Secrets in replies and console output (issue #203) ---- */
+
+/*
+ * True for configuration keys whose value must never leave the charger.
+ * OCPP 1.6 treats AuthorizationKey as write-only, but MicroOcppMongoose
+ * declares it readable, so the firmware's GetConfiguration handler drops the
+ * value of every key this returns true for.
+ */
+bool ocpp_config_key_is_secret(const char *key);
+
+/*
+ * Redact the AuthorizationKey value in a console line, in place. Handles
+ * GetConfiguration replies and ChangeConfiguration requests in either field
+ * order, lines cut off inside the value by the console buffer, and the
+ * "auth Token=<id>:<key>" debug line of MicroOcppMongoose. A value becomes
+ * "***" (shorter values become as many '*'), so the line never grows.
+ * Returns the number of values redacted.
+ */
+size_t ocpp_redact_auth_key(char *line);
+
 #ifdef __cplusplus
 }
 #endif

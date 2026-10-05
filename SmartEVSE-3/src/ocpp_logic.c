@@ -533,3 +533,88 @@ bool ocpp_silence_should_reinit(uint8_t silent_reconnects,
     }
     return !session_in_progress && !charging;
 }
+
+/* ---- Secrets in replies and console output (issue #203) ---- */
+
+#define OCPP_SECRET_KEY_TOKEN  "\"AuthorizationKey\""
+#define OCPP_AUTH_TOKEN_PREFIX "auth Token="
+
+bool ocpp_config_key_is_secret(const char *key) {
+    return key != NULL && strcmp(key, "AuthorizationKey") == 0;
+}
+
+/* Replace [start, end) with "***", or with as many '*' when shorter. */
+static void ocpp_mask_span(char *start, char *end) {
+    size_t len = (size_t)(end - start);
+    if (len <= 3) {
+        memset(start, '*', len);
+        return;
+    }
+    memcpy(start, "***", 3);
+    memmove(start + 3, end, strlen(end) + 1);
+}
+
+/* End of a JSON string body that starts at s: its closing quote, or the NUL
+ * when the line was cut off inside it. */
+static char *ocpp_json_string_end(char *s) {
+    while (*s != '\0' && *s != '"') {
+        if (*s == '\\' && s[1] != '\0') {
+            s++;
+        }
+        s++;
+    }
+    return s;
+}
+
+size_t ocpp_redact_auth_key(char *line) {
+    if (!line) {
+        return 0;
+    }
+
+    size_t count = 0;
+    char *search = line;
+    char *key;
+    while ((key = strstr(search, OCPP_SECRET_KEY_TOKEN)) != NULL) {
+        /* The JSON object holding the key: from the '{' before it to the '}'
+         * after it, or to the end of a line cut off by the console buffer. */
+        char *obj = key;
+        while (obj > line && *obj != '{') {
+            obj--;
+        }
+        const char *obj_end = strchr(key, '}');
+        if (!obj_end) {
+            obj_end = line + strlen(line);
+        }
+
+        char *field = strstr(obj, "\"value\"");
+        if (field && field < obj_end) {
+            char *p = field + strlen("\"value\"");
+            while (*p == ' ') p++;
+            if (*p == ':') {
+                p++;
+                while (*p == ' ') p++;
+                if (*p == '"') {
+                    p++;
+                    ocpp_mask_span(p, ocpp_json_string_end(p));
+                    count++;
+                }
+            }
+        }
+
+        /* The value may have come before the key and shifted it: find it again. */
+        search = strstr(obj, OCPP_SECRET_KEY_TOKEN) + strlen(OCPP_SECRET_KEY_TOKEN);
+    }
+
+    char *token = strstr(line, OCPP_AUTH_TOKEN_PREFIX);
+    if (token) {
+        char *colon = strchr(token + strlen(OCPP_AUTH_TOKEN_PREFIX), ':');
+        if (colon) {
+            char *end = colon + 1;
+            while (*end != '\0' && *end != ' ' && *end != '\n') end++;
+            ocpp_mask_span(colon + 1, end);
+            count++;
+        }
+    }
+
+    return count;
+}
