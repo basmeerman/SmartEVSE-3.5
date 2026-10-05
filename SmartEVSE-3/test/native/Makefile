@@ -31,6 +31,7 @@ P1_PARSE_SRC        := $(SRC_DIR)/p1_parse.c
 MODBUS_LOG_SRC      := $(SRC_DIR)/modbus_log.c
 OCPP_LOGIC_SRC     := $(SRC_DIR)/ocpp_logic.c
 OCPP_TELEMETRY_SRC := $(SRC_DIR)/ocpp_telemetry.c
+NET_WATCHDOG_SRC   := $(SRC_DIR)/net_watchdog.c
 SOLAR_DEBUG_JSON_SRC := $(SRC_DIR)/solar_debug_json.c
 SESSION_LOG_SRC      := $(SRC_DIR)/session_log.c
 DIAG_TELEMETRY_SRC  := $(SRC_DIR)/diag_telemetry.c
@@ -120,6 +121,9 @@ $(BUILD)/test_ocpp_stop_sync: $(TEST_DIR)/test_ocpp_stop_sync.c $(OCPP_LOGIC_SRC
 
 $(BUILD)/test_ocpp_tx_sync: $(TEST_DIR)/test_ocpp_tx_sync.c $(OCPP_LOGIC_SRC) $(SRC_DIR)/ocpp_logic.h include/*.h | $(BUILD)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(TEST_DIR)/test_ocpp_tx_sync.c $(OCPP_LOGIC_SRC)
+
+$(BUILD)/test_net_watchdog: $(TEST_DIR)/test_net_watchdog.c $(NET_WATCHDOG_SRC) $(SRC_DIR)/net_watchdog.h include/*.h | $(BUILD)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(TEST_DIR)/test_net_watchdog.c $(NET_WATCHDOG_SRC)
 
 $(BUILD)/test_http_auth: $(TEST_DIR)/test_http_auth.c $(SRC_DIR)/http_auth.c $(SRC_DIR)/http_auth.h include/*.h | $(BUILD)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(TEST_DIR)/test_http_auth.c $(SRC_DIR)/http_auth.c

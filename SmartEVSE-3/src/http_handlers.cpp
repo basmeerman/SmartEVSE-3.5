@@ -263,6 +263,7 @@ bool handle_URI(struct mg_connection *c, struct mg_http_message *hm,  webServerR
 
             doc["wifi"]["ssid"] = WiFi.SSID();
             doc["wifi"]["rssi"] = WiFi.RSSI();
+            doc["wifi"]["watchdog_recoveries"] = net_watchdog_recoveries();
             doc["wifi"]["bssid"] = WiFi.BSSIDstr();
         }
 
