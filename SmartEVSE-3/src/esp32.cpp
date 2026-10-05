@@ -52,6 +52,7 @@
 #include <MicroOcppMongooseClient.h>
 #include <MicroOcpp/Core/Configuration.h>
 #include <MicroOcpp/Core/Context.h>
+#include <MicroOcpp/Operations/GetConfiguration.h>
 #include "ocpp_logic.h"
 #include "rfid_redact.h"
 #include "ocpp_telemetry.h"
@@ -1734,7 +1735,11 @@ static const char *ocppMeterSerialToReport(void) {
 // everything else. Debug builds only; see platformio.ini.
 static void ocpp_console_out(const char *msg) {
     if (msg) {
-        _LOG_A_NO_FUNC("%s", msg);
+        // OCPP traffic can carry the AuthorizationKey; never print it (issue #203)
+        char line[MO_CUSTOM_CONSOLE_MAXMSGSIZE];
+        snprintf(line, sizeof(line), "%s", msg);
+        ocpp_redact_auth_key(line);
+        _LOG_A_NO_FUNC("%s", line);
     }
 }
 #endif
@@ -1793,6 +1798,24 @@ static void ocppResetTransactionWatch() {
     }
 }
 
+// GetConfiguration that never returns the value of a secret key (issue #203).
+// MicroOcppMongoose declares AuthorizationKey readable; OCPP 1.6 makes it
+// write-only, so the entry is reported without its optional "value".
+class OcppGetConfigurationNoSecrets : public MicroOcpp::Ocpp16::GetConfiguration {
+public:
+    std::unique_ptr<MicroOcpp::JsonDoc> createConf() override {
+        auto doc = MicroOcpp::Ocpp16::GetConfiguration::createConf();
+        if (doc) {
+            for (JsonObject entry : (*doc)["configurationKey"].as<JsonArray>()) {
+                if (ocpp_config_key_is_secret(entry["key"] | "")) {
+                    entry.remove("value");
+                }
+            }
+        }
+        return doc;
+    }
+};
+
 void ocppInit() {
 
     // A re-init after silent reconnects keeps the counters since boot (issue #201)
@@ -1825,6 +1848,10 @@ void ocppInit() {
             ChargerCredentials("SmartEVSE", "Stegen Electronics", VERSION, String(serialnr).c_str(),
                                ocppMeterSerialToReport(), ocppMeterTypeToReport()),
             filesystem);
+
+    // Replaces MicroOcpp's own handler, registered by mocpp_initialize()
+    getOcppContext()->getOperationRegistry().registerOperation("GetConfiguration", [] () {
+        return new OcppGetConfigurationNoSecrets();});
 
     //setup OCPP hardware bindings
 

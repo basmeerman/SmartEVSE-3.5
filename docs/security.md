@@ -101,6 +101,14 @@ the settings JSON:
 This means if a malicious script on your LAN calls `GET /settings`, it
 learns only **that** a MQTT password is set, not what it is.
 
+Setting a secret does not echo it back either: `POST /settings` answers
+`mqtt_password_set` / `ocpp_auth_key_set: true/false` instead of the value.
+
+The OCPP backend cannot read the auth key back: `GetConfiguration` lists
+`AuthorizationKey` without its value (OCPP 1.6 treats the key as
+write-only), and debug-build OCPP traffic on the telnet console shows it
+as `***`.
+
 ### Why the bullets
 
 The Web UI displays `••••••••` in password fields when a secret is
