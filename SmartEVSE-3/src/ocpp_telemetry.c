@@ -35,6 +35,11 @@ void ocpp_telemetry_tx_stopped(ocpp_telemetry_t *t) {
     t->tx_active = false;
 }
 
+void ocpp_telemetry_tx_discarded(ocpp_telemetry_t *t) {
+    if (!t) return;
+    t->tx_discard_count++;
+}
+
 void ocpp_telemetry_auth_accepted(ocpp_telemetry_t *t) {
     if (!t) return;
     t->auth_accept_count++;

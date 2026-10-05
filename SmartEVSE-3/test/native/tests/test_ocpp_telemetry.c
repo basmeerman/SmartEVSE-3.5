@@ -156,6 +156,52 @@ void test_telemetry_null_safety(void) {
 }
 
 /* ---- Main ---- */
+/* ---- Discarded transactions (issue #200) ---- */
+
+/*
+ * @feature OCPP Telemetry
+ * @req REQ-OCPP-126
+ * @scenario Discarded transaction increments its own counter
+ * @given Telemetry is initialized
+ * @when ocpp_telemetry_tx_discarded is called twice
+ * @then tx_discard_count is 2 and the start/stop counters are unchanged
+ */
+void test_telemetry_tx_discarded(void) {
+    setup();
+    ocpp_telemetry_tx_discarded(&t);
+    ocpp_telemetry_tx_discarded(&t);
+    TEST_ASSERT_EQUAL_INT(2, t.tx_discard_count);
+    TEST_ASSERT_EQUAL_INT(0, t.tx_start_count);
+    TEST_ASSERT_EQUAL_INT(0, t.tx_stop_count);
+}
+
+/*
+ * @feature OCPP Telemetry
+ * @req REQ-OCPP-126
+ * @scenario Init clears the discard counter
+ * @given tx_discard_count is 5
+ * @when ocpp_telemetry_init is called
+ * @then tx_discard_count is 0
+ */
+void test_telemetry_init_clears_discards(void) {
+    t.tx_discard_count = 5;
+    ocpp_telemetry_init(&t);
+    TEST_ASSERT_EQUAL_INT(0, t.tx_discard_count);
+}
+
+/*
+ * @feature OCPP Telemetry
+ * @req REQ-OCPP-126
+ * @scenario Discard counter tolerates a NULL struct
+ * @given A NULL telemetry pointer
+ * @when ocpp_telemetry_tx_discarded is called
+ * @then Nothing happens and the program does not crash
+ */
+void test_telemetry_tx_discarded_null(void) {
+    ocpp_telemetry_tx_discarded(NULL);
+    TEST_ASSERT_TRUE(true);
+}
+
 int main(void) {
     TEST_SUITE_BEGIN("OCPP Telemetry");
 
@@ -166,6 +212,9 @@ int main(void) {
     RUN_TEST(test_telemetry_auth_counters);
     RUN_TEST(test_telemetry_ws_reconnect_tracking);
     RUN_TEST(test_telemetry_null_safety);
+    RUN_TEST(test_telemetry_tx_discarded);
+    RUN_TEST(test_telemetry_init_clears_discards);
+    RUN_TEST(test_telemetry_tx_discarded_null);
 
     TEST_SUITE_RESULTS();
 }

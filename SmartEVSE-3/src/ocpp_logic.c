@@ -479,3 +479,46 @@ bool ocpp_should_report_occupied(bool locking_tx_present,
 
     return false;
 }
+
+/* ---- StopTransaction meter value synchronization (issue #202) ---- */
+
+ocpp_stop_ready_t ocpp_stop_tx_ready(unsigned long now_ms,
+                                     unsigned long sync_ms,
+                                     bool ev_meter_present,
+                                     int32_t energy_wh,
+                                     int32_t meter_start_wh) {
+    unsigned long elapsed = now_ms - sync_ms;
+
+    if (elapsed < OCPP_STOP_SYNC_MS) {
+        return OCPP_STOP_WAIT;
+    }
+    if (!ev_meter_present) {
+        return OCPP_STOP_READY;
+    }
+    if (energy_wh > 0 && (meter_start_wh < 0 || energy_wh >= meter_start_wh)) {
+        return OCPP_STOP_READY;
+    }
+    if (elapsed >= OCPP_STOP_METER_WAIT_MAX_MS) {
+        return OCPP_STOP_READY_FALLBACK;
+    }
+    return OCPP_STOP_WAIT;
+}
+
+/* ---- Transactions MicroOcpp gives up on (issue #200) ---- */
+
+ocpp_tx_watch_t ocpp_tx_watch_decide(bool tx_silent, bool stop_confirmed) {
+    if (tx_silent) {
+        return OCPP_TXWATCH_DISCARDED;
+    }
+    if (stop_confirmed) {
+        return OCPP_TXWATCH_SYNCED;
+    }
+    return OCPP_TXWATCH_KEEP;
+}
+
+int ocpp_tx_attempts_upgrade(int current) {
+    if (current == OCPP_MO_TX_ATTEMPTS_LIBRARY_DEFAULT) {
+        return OCPP_TX_ATTEMPTS_DEFAULT;
+    }
+    return current;
+}

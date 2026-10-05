@@ -25,6 +25,7 @@ typedef struct {
     /* Transaction lifecycle */
     uint32_t tx_start_count;
     uint32_t tx_stop_count;
+    uint32_t tx_discard_count;   /* given up by MicroOcpp, never reached the backend */
     bool     tx_active;
 
     /* Authorization results */
@@ -48,6 +49,7 @@ void ocpp_telemetry_ws_connected(ocpp_telemetry_t *t);
 void ocpp_telemetry_ws_disconnected(ocpp_telemetry_t *t);
 void ocpp_telemetry_tx_started(ocpp_telemetry_t *t);
 void ocpp_telemetry_tx_stopped(ocpp_telemetry_t *t);
+void ocpp_telemetry_tx_discarded(ocpp_telemetry_t *t);
 void ocpp_telemetry_auth_accepted(ocpp_telemetry_t *t);
 void ocpp_telemetry_auth_rejected(ocpp_telemetry_t *t);
 void ocpp_telemetry_auth_timeout(ocpp_telemetry_t *t);

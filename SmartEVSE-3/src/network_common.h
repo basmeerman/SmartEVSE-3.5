@@ -153,6 +153,7 @@ extern uint32_t serialnr;
 extern void RunFirmwareUpdate(void);
 extern void WiFiSetup(void);
 extern void handleWIFImode(void);
+uint32_t net_watchdog_recoveries(void);   // WiFi reassociations by the network watchdog that restored IP traffic (issue #199)
 extern bool getLatestVersion(String owner_repo, String asset_name, char *version);
 /* Plan 16 Phase 1: shared auth gate used by http_handlers.cpp AND the mutating
  * endpoints in network_common.cpp. Implemented in http_handlers.cpp so the

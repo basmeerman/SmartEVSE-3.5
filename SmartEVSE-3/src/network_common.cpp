@@ -16,6 +16,8 @@
 #include "ota_upload.h"
 #include "ca_roots.h"
 #include "reconnect_backoff.h"
+#include "net_watchdog.h"
+#include "ping/ping_sock.h"
 #include <ArduinoJson.h>
 
 #include <HTTPClient.h>
@@ -2258,6 +2260,92 @@ void WiFiSetup(void) {
 
 
 // called by loop() in the main program
+// ---- Network watchdog (issue #199) ----
+// The STA_DISCONNECTED handler only fires when the station loses its
+// association. When it stays associated but the IP layer stops working, the
+// charger is unreachable until something outside forces a reassociation. A
+// gateway ping proves IP traffic; net_watchdog.c decides when to reassociate
+// and when to reboot (never while charging).
+//
+// The ping runs as one infinite ESP-IDF ping session (one small task, default
+// IDF stack of 2048 bytes + TASK_EXTRA_STACK_SIZE, priority 2), one 8-byte echo
+// every 30 s. The reply callback runs in that task and only stores millis()
+// into a 32-bit variable, which is atomic on the ESP32.
+static net_watchdog_t NetWatchdog;
+static volatile unsigned long NetLastPingReplyMs = 0;
+static unsigned long NetHandledPingReplyMs = 0;
+static esp_ping_handle_t NetPing = nullptr;
+static uint32_t NetPingTarget = 0;
+
+static void net_ping_on_success(esp_ping_handle_t hdl, void *args) {
+    (void) hdl;
+    (void) args;
+    NetLastPingReplyMs = millis();
+}
+
+// Keep one ping session aimed at the current gateway. Called from network_loop().
+static void net_ping_ensure(void) {
+    IPAddress gw = WiFi.gatewayIP();
+    uint32_t target = (uint32_t) gw;
+    if (target == 0 || (NetPing && target == NetPingTarget)) return;
+
+    if (NetPing) {
+        esp_ping_stop(NetPing);
+        esp_ping_delete_session(NetPing);
+        NetPing = nullptr;
+    }
+
+    esp_ping_config_t cfg = ESP_PING_DEFAULT_CONFIG();
+    cfg.count = ESP_PING_COUNT_INFINITE;
+    cfg.interval_ms = 30000;
+    cfg.timeout_ms = 2000;
+    cfg.data_size = 8;
+    IP_ADDR4(&cfg.target_addr, gw[0], gw[1], gw[2], gw[3]);
+
+    esp_ping_callbacks_t cbs = {};
+    cbs.on_ping_success = net_ping_on_success;
+
+    if (esp_ping_new_session(&cfg, &cbs, &NetPing) == ESP_OK) {
+        esp_ping_start(NetPing);
+        NetPingTarget = target;
+        _LOG_A("Network watchdog: pinging gateway %s every 30s\n", gw.toString().c_str());
+    } else {
+        NetPing = nullptr;
+        _LOG_W("Network watchdog: could not start gateway ping\n");
+    }
+}
+
+static void net_watchdog_tick(void) {
+    if (WIFImode != 1) return;
+
+    bool associated = WiFi.status() == WL_CONNECTED;
+    if (associated) net_ping_ensure();
+
+    unsigned long reply = NetLastPingReplyMs;
+    if (reply != 0 && reply != NetHandledPingReplyMs) {
+        NetHandledPingReplyMs = reply;
+        net_wd_link_ok(&NetWatchdog, reply);
+    }
+
+    switch (net_wd_decide(&NetWatchdog, millis(), associated, State == STATE_C)) {
+        case NET_WD_REASSOCIATE:
+            _LOG_A("Network watchdog: no reply from gateway for %lus while associated, reconnecting WiFi\n",
+                   (millis() - NetWatchdog.last_ok_ms) / 1000UL);
+            WiFi.reconnect();
+            break;
+        case NET_WD_REBOOT:
+            _LOG_A("Network watchdog: still no IP traffic after reconnecting WiFi, rebooting\n");
+            shouldReboot = true;
+            break;
+        default:
+            break;
+    }
+}
+
+uint32_t net_watchdog_recoveries(void) {
+    return NetWatchdog.recoveries;
+}
+
 void network_loop() {
     static unsigned long lastCheck_net = 0;
 
@@ -2280,6 +2368,7 @@ void network_loop() {
         if (!LocalTimeSet && WIFImode == 1) {
             _LOG_A("Time not synced with NTP yet.\n");
         }
+        net_watchdog_tick();
     }
 
     mg_mgr_poll(&mgr, 100);                                                     // TODO increase this parameter to up to 1000 to make loop() less greedy
