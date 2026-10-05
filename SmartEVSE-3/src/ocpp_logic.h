@@ -359,6 +359,35 @@ ocpp_stop_ready_t ocpp_stop_tx_ready(unsigned long now_ms,
                                      int32_t energy_wh,
                                      int32_t meter_start_wh);
 
+/* ---- Transactions MicroOcpp gives up on (issue #200) ---- */
+
+#define OCPP_MO_TX_ATTEMPTS_LIBRARY_DEFAULT  3   /* MicroOcpp's TransactionMessageAttempts */
+#define OCPP_TX_ATTEMPTS_DEFAULT            10   /* Fork default: ~45 min of retries at 60 s x n */
+
+typedef enum {
+    OCPP_TXWATCH_KEEP      = 0,  /* Still syncing: keep watching                    */
+    OCPP_TXWATCH_SYNCED    = 1,  /* StopTransaction confirmed by the backend         */
+    OCPP_TXWATCH_DISCARDED = 2   /* MicroOcpp gave up: the backend never got it all  */
+} ocpp_tx_watch_t;
+
+/*
+ * Classify a transaction the firmware is watching. MicroOcpp marks a
+ * transaction silent when StartTransaction or StopTransaction exceeded
+ * TransactionMessageAttempts, and then confirms its stop locally without
+ * sending anything, so "silent" must be checked before "stop confirmed".
+ *
+ *   tx_silent       — Transaction::isSilent()
+ *   stop_confirmed  — Transaction::getStopSync().isConfirmed()
+ */
+ocpp_tx_watch_t ocpp_tx_watch_decide(bool tx_silent, bool stop_confirmed);
+
+/*
+ * Value to store in TransactionMessageAttempts at boot. Only MicroOcpp's own
+ * default (3) is raised to OCPP_TX_ATTEMPTS_DEFAULT; any other value was set
+ * by the backend through ChangeConfiguration and is kept.
+ */
+int ocpp_tx_attempts_upgrade(int current);
+
 #ifdef __cplusplus
 }
 #endif

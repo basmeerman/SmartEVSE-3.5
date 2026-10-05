@@ -503,3 +503,22 @@ ocpp_stop_ready_t ocpp_stop_tx_ready(unsigned long now_ms,
     }
     return OCPP_STOP_WAIT;
 }
+
+/* ---- Transactions MicroOcpp gives up on (issue #200) ---- */
+
+ocpp_tx_watch_t ocpp_tx_watch_decide(bool tx_silent, bool stop_confirmed) {
+    if (tx_silent) {
+        return OCPP_TXWATCH_DISCARDED;
+    }
+    if (stop_confirmed) {
+        return OCPP_TXWATCH_SYNCED;
+    }
+    return OCPP_TXWATCH_KEEP;
+}
+
+int ocpp_tx_attempts_upgrade(int current) {
+    if (current == OCPP_MO_TX_ATTEMPTS_LIBRARY_DEFAULT) {
+        return OCPP_TX_ATTEMPTS_DEFAULT;
+    }
+    return current;
+}

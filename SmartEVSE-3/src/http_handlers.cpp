@@ -400,6 +400,7 @@ bool handle_URI(struct mg_connection *c, struct mg_http_message *hm,  webServerR
         doc["ocpp"]["tx_active"] = OcppTelemetry.tx_active;
         doc["ocpp"]["tx_starts"] = OcppTelemetry.tx_start_count;
         doc["ocpp"]["tx_stops"] = OcppTelemetry.tx_stop_count;
+        doc["ocpp"]["tx_discards"] = OcppTelemetry.tx_discard_count;
         doc["ocpp"]["auth_accepts"] = OcppTelemetry.auth_accept_count;
         doc["ocpp"]["auth_rejects"] = OcppTelemetry.auth_reject_count;
         doc["ocpp"]["auth_timeouts"] = OcppTelemetry.auth_timeout_count;

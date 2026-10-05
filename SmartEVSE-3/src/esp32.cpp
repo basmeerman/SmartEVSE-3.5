@@ -1179,6 +1179,7 @@ void mqttPublishData() {
         mqtt_pub_str(MQTT_SLOT_OCPP, "/OCPP", OcppMode ? "Enabled" : "Disabled", true, now_s);
         mqtt_pub_str(MQTT_SLOT_OCPP_CONNECTION, "/OCPPConnection", (OcppWsClient && OcppWsClient->isConnected()) ? "Connected" : "Disconnected", false, now_s);
         mqtt_pub_str(MQTT_SLOT_OCPP_TX_ACTIVE, "/OCPPTxActive", OcppTelemetry.tx_active ? "true" : "false", false, now_s);
+        mqtt_pub_int(MQTT_SLOT_OCPP_TX_DISCARDED, "/OCPPTxDiscarded", (int32_t) OcppTelemetry.tx_discard_count, false, now_s);
         {
             char ocpp_limit_buf[16];
             if (OcppCurrentLimit >= 0.0f) {
@@ -1738,6 +1739,55 @@ static void ocpp_console_out(const char *msg) {
 }
 #endif
 
+// Transactions MicroOcpp may still give up on (issue #200). MicroOcpp marks a
+// transaction silent after TransactionMessageAttempts failed sends and then drops
+// it without a callback, so the firmware keeps a reference until the backend has
+// confirmed the StopTransaction, and counts the ones that went silent instead.
+// MicroOcpp keeps at most MO_TXRECORD_SIZE (4) transactions per connector.
+#define OCPP_TX_WATCH_SLOTS 4
+static std::shared_ptr<MicroOcpp::Transaction> OcppWatchedTx[OCPP_TX_WATCH_SLOTS];
+
+static void ocppWatchTransactions(std::shared_ptr<MicroOcpp::Transaction> current) {
+    if (current && current->getStartSync().isRequested()) {
+        bool known = false;
+        int freeSlot = -1;
+        for (int i = 0; i < OCPP_TX_WATCH_SLOTS; i++) {
+            if (OcppWatchedTx[i] == current) known = true;
+            else if (!OcppWatchedTx[i] && freeSlot < 0) freeSlot = i;
+        }
+        if (!known && freeSlot >= 0) OcppWatchedTx[freeSlot] = current;
+    }
+
+    for (int i = 0; i < OCPP_TX_WATCH_SLOTS; i++) {
+        auto& tx = OcppWatchedTx[i];
+        if (!tx) continue;
+        switch (ocpp_tx_watch_decide(tx->isSilent(), tx->getStopSync().isConfirmed())) {
+            case OCPP_TXWATCH_DISCARDED: {
+                char fp[RFID_FINGERPRINT_MAX];
+                rfid_fingerprint_hex(tx->getIdTag(), fp, sizeof(fp));
+                ocpp_telemetry_tx_discarded(&OcppTelemetry);
+                _LOG_A("OCPP: transaction %u (idTag %s, meterStart %ld Wh, StartTx %s) was discarded "
+                       "after TransactionMessageAttempts; the backend did not receive it\n",
+                       tx->getTxNr(), fp, (long) tx->getMeterStart(),
+                       tx->getStartSync().isConfirmed() ? "confirmed" : "not confirmed");
+                tx.reset();
+                break;
+            }
+            case OCPP_TXWATCH_SYNCED:
+                tx.reset();
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+static void ocppResetTransactionWatch() {
+    for (int i = 0; i < OCPP_TX_WATCH_SLOTS; i++) {
+        OcppWatchedTx[i].reset();
+    }
+}
+
 void ocppInit() {
 
     ocpp_telemetry_init(&OcppTelemetry);
@@ -1957,6 +2007,17 @@ void ocppInit() {
 
     OcppUnlockConnectorOnEVSideDisconnect = MicroOcpp::declareConfiguration<bool>("UnlockConnectorOnEVSideDisconnect", true);
 
+    // MicroOcpp drops a transaction after 3 failed sends; on a half-open connection
+    // that is a few minutes. Raise the library default, keep a backend-set value (issue #200).
+    if (auto attempts = MicroOcpp::getConfigurationPublic("TransactionMessageAttempts")) {
+        int wanted = ocpp_tx_attempts_upgrade(attempts->getInt());
+        if (wanted != attempts->getInt()) {
+            attempts->setInt(wanted);
+            MicroOcpp::configuration_save();
+            _LOG_A("OCPP: TransactionMessageAttempts set to %d\n", wanted);
+        }
+    }
+
     OcppLastOcppResponse = millis(); // Seed silence detector — see ocpp_silence_decide()
 
     OcppStopReadingSyncTime = millis(); // Start the stop-value wait at boot, not at millis() == 0 (issue #202)
@@ -1978,6 +2039,7 @@ void ocppDeinit() {
 
     OcppUnlockConnectorOnEVSideDisconnect.reset();
     OcppLockingTx.reset();
+    ocppResetTransactionWatch();
     OcppForcesLock = false;
 
     if (OcppTrackPermitsCharge) {
@@ -2165,6 +2227,8 @@ void ocppLoop() {
     }
 
     auto& transaction = getTransaction(); // Common tx which OCPP is currently processing (or nullptr if no tx is ongoing)
+
+    ocppWatchTransactions(transaction);
 
     // Check if Locking Tx has been invalidated by something other than RFID swipe
     if (OcppLockingTx) {
