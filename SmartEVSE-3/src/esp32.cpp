@@ -1964,6 +1964,8 @@ void ocppInit() {
     setStopTxReadyInput([] () {
         // Stop value synchronization: MicroOcpp samples meterStop as soon as this returns true.
         // Hold StopTransaction until the EV meter has a reading for this transaction (issue #202).
+        // MicroOcpp calls this from Connector::loop() for that connector's own transaction,
+        // which is the object getTransaction() returns (single connector).
         auto& tx = getTransaction();
         int32_t meterStart = tx ? tx->getMeterStart() : -1;
         ocpp_stop_ready_t ready = ocpp_stop_tx_ready(millis(), OcppStopReadingSyncTime,
