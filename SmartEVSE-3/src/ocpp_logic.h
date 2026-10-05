@@ -388,6 +388,30 @@ ocpp_tx_watch_t ocpp_tx_watch_decide(bool tx_silent, bool stop_confirmed);
  */
 int ocpp_tx_attempts_upgrade(int current);
 
+/* ---- Outgoing queue stuck across reconnects (issue #201) ---- */
+
+#define OCPP_SILENCE_REINIT_AFTER  2  /* Forced reconnects without a probe answer */
+
+/*
+ * Decide whether to re-initialise MicroOcpp (ocppDeinit() + ocppInit()).
+ *
+ * MicroOcpp sends StatusNotification without a timeout. When one is lost on a
+ * half-open socket, the library waits for its answer forever and sends no other
+ * request, also after a WebSocket reconnect; incoming calls are still answered.
+ * Only a fresh MicroOcpp instance clears that. ocppDeinit() ends a running
+ * transaction and releases a cable lock held by one, so the re-init waits until
+ * no session is in progress and the EVSE is not charging. Transactions are kept
+ * in flash and their pending messages are sent after the re-init.
+ *
+ *   silent_reconnects   — consecutive forced reconnects without a probe answer
+ *   session_in_progress — isTransactionActive() || isTransactionRunning()
+ *                         || a transaction holds the cable lock (OcppLockingTx)
+ *   charging            — State == STATE_C
+ */
+bool ocpp_silence_should_reinit(uint8_t silent_reconnects,
+                                bool session_in_progress,
+                                bool charging);
+
 #ifdef __cplusplus
 }
 #endif
